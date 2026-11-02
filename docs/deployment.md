@@ -50,41 +50,30 @@ Notes:
 - Without Docker: `python run.py serve` (listens on `HOST:PORT` from `.env`,
   default `127.0.0.1:8311`).
 
-## 2. Create the tunnel
+## 2. Cloudflare Tunnel
 
-Install `cloudflared`, then (once):
+**Live at https://311.scurrycat.ca** (set up 2026-11-02).
 
-```bash
-cloudflared tunnel login
-cloudflared tunnel create gilead-311
-cloudflared tunnel route dns gilead-311 311.<your-domain>
-```
+The team server already runs a remotely-managed tunnel, `home-docker`
+(`cloudflared` installed natively on Windows), which publishes several
+`*.scurrycat.ca` apps. The site is one more route on that tunnel:
 
-Config file (`%USERPROFILE%\.cloudflared\config.yml` on Windows,
-`~/.cloudflared/config.yml` elsewhere). Never commit the credentials JSON:
+| Setting | Value |
+|---|---|
+| Tunnel | `home-docker` (`be337d33-201f-472d-a06d-5b24f08be67d`), managed in the dashboard |
+| Published route | `311.scurrycat.ca` -> `http://localhost:8311` |
+| DNS | proxied CNAME `311.scurrycat.ca` -> `be337d33-201f-472d-a06d-5b24f08be67d.cfargotunnel.com` |
 
-```yaml
-tunnel: gilead-311
-credentials-file: C:\Users\<you>\.cloudflared\<tunnel-id>.json
-ingress:
-  - hostname: 311.<your-domain>
-    service: http://127.0.0.1:8311
-  - service: http_status:404
-```
+Because `cloudflared` runs on the host, it reaches the container through the
+port published on `127.0.0.1:8311`; nothing in `docker-compose.yml` is
+tunnel-specific. To change the route: Cloudflare dashboard > Networking >
+Tunnels > `home-docker` > Published application routes. Edit only the
+`311.scurrycat.ca` row; the other routes belong to other apps.
 
-Run it, or install it as a service so it starts with the machine:
-
-```bash
-cloudflared tunnel run gilead-311
-```
-
-```bash
-cloudflared service install
-```
-
-Alternative: create the tunnel in the Cloudflare dashboard (Zero Trust >
-Networks > Tunnels), add a public hostname pointing to
-`http://127.0.0.1:8311`, and run the connector command it gives you.
+Setting this up on a different machine: create a tunnel in the dashboard
+(Networking > Tunnels > Create Tunnel), run the connector command it shows,
+and add a published application route for your hostname pointing to
+`http://localhost:8311`.
 
 ## 3. Things to know before sharing the link
 
@@ -97,8 +86,9 @@ Networks > Tunnels), add a public hostname pointing to
   of that request; it is not written to disk, the database, logs or the
   conversation state. Uvicorn access logs record paths, never headers.
 - **Long replies.** Local thinking models can take 30-90 s per turn.
-  Cloudflare's proxy timeout is 100 s; pick faster models (for example
-  `qwen2.5:7b`) if requests start timing out.
+  Cloudflare's proxy timeout is 100 s; pick faster models (the default
+  `qwen3:4b-instruct` replies in about 5-15 s on the team server) if
+  requests start timing out.
 - Outside Docker the server trusts `X-Forwarded-*` headers from `127.0.0.1`
   only (`FORWARDED_ALLOW_IPS`); in the container it trusts them from the
   Docker network, since the port is only published to the host.
