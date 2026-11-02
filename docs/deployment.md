@@ -24,7 +24,8 @@ limit and a restart every minute if it exits. Output goes to
 models are available only while that user is logged in.
 
 - Update to the latest `main`: `deploy\windows\update.cmd` (pull, install, restart).
-- Restart only: `schtasks /end /tn Gilead311` then `schtasks /run /tn Gilead311`.
+- Restart only: `deploy\windows\stop_server.cmd` then `schtasks /run /tn Gilead311`
+  (`schtasks /end` alone leaves the Python process running).
 
 One-time setup (already done on the team server):
 
