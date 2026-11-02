@@ -16,14 +16,15 @@ It listens on `HOST:PORT` from `.env` (default `127.0.0.1:8311`). Keep it on
 
 The site runs natively (no Docker) from `C:\Users\nick\311_Agent_MMAI`, a
 clone of this repo, with its own `.venv` and `.env`. A scheduled task named
-`Gilead311` runs `deploy\windows\run_server.cmd` at logon of the `nick` user;
-output goes to `logs\server.log`. Ollama on the same machine is reached at
-`http://localhost:11434`.
+`Gilead311` runs `deploy\windows\run_server.cmd` as `nick` at system startup
+(S4U: runs without anyone logged in, no stored password), with no time
+limit and a restart every minute if it exits. Output goes to
+`logs\server.log`. Ollama on the same machine is reached at
+`http://localhost:11434`; it runs in the `yick1` desktop session, so local
+models are available only while that user is logged in.
 
 - Update to the latest `main`: `deploy\windows\update.cmd` (pull, install, restart).
 - Restart only: `schtasks /end /tn Gilead311` then `schtasks /run /tn Gilead311`.
-- Like Ollama and Docker Desktop on that machine, the task runs only while
-  `nick` is logged in; enable auto-login for reboot resilience.
 
 One-time setup (already done on the team server):
 
@@ -33,7 +34,15 @@ cd 311_Agent_MMAI
 python -m venv .venv
 .venv\Scripts\python -m pip install -r requirements.txt
 copy .env.example .env
-schtasks /create /tn Gilead311 /sc onlogon /tr "\"C:\Users\nick\311_Agent_MMAI\deploy\windows\run_server.cmd\"" /rl limited
+```
+
+Then register the task (PowerShell, as an administrator):
+
+```powershell
+$action = New-ScheduledTaskAction -Execute 'cmd.exe' -Argument '/c "C:\Users\nick\311_Agent_MMAI\deploy\windows\run_server.cmd"' -WorkingDirectory 'C:\Users\nick\311_Agent_MMAI'
+$settings = New-ScheduledTaskSettingsSet -ExecutionTimeLimit ([TimeSpan]::Zero) -RestartCount 999 -RestartInterval (New-TimeSpan -Minutes 1) -StartWhenAvailable
+Register-ScheduledTask -TaskName Gilead311 -Action $action -Trigger (New-ScheduledTaskTrigger -AtStartup) -Principal (New-ScheduledTaskPrincipal -UserId nick -LogonType S4U) -Settings $settings
+Start-ScheduledTask -TaskName Gilead311
 ```
 
 ## 2. Create the tunnel

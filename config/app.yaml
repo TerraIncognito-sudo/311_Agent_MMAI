@@ -16,6 +16,7 @@ llm:
     ollama: qwen3:4b-instruct
     openrouter: anthropic/claude-haiku-5.5
   temperature: 0.2
+  ollama_num_ctx: 8192       # context window per Ollama request; keep small enough to fit in VRAM
   max_tool_steps: 8          # cap on model->tool round trips per resident turn
   request_timeout_s: 120
 
