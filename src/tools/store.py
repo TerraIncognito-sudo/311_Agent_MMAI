@@ -114,6 +114,58 @@ class SupabaseStore:
         self._req("PATCH", "kb_documents", params={"id": f"eq.{document_id}"},
                   json={"chunked_at": _now().isoformat()}, headers={"Prefer": "return=minimal"})
 
+    def list_documents(self) -> list[dict]:
+        return self._req("GET", "kb_documents", params={
+            "select": "id,source,title,content,tags,active,updated_at,chunked_at", "order": "title"})
+
+    def update_document(self, document_id: str, fields: dict) -> dict | None:
+        rows = self._req("PATCH", "kb_documents", params={"id": f"eq.{document_id}"}, json=fields,
+                         headers={"Prefer": "return=representation"})
+        return rows[0] if rows else None
+
+    def delete_document(self, document_id: str) -> None:
+        self._req("DELETE", "kb_documents", params={"id": f"eq.{document_id}"})
+
+    # --- config edits from /admin (src/config.py) ---
+    def config_overrides(self) -> list[dict]:
+        return self._req("GET", "config_files", params={"select": "path,content,updated_at,updated_by"})
+
+    def save_config(self, path: str, content: str, author: str | None, note: str | None) -> None:
+        self._req("POST", "config_files", params={"on_conflict": "path"},
+                  json={"path": path, "content": content, "updated_at": _now().isoformat(), "updated_by": author},
+                  headers={"Prefer": "return=minimal,resolution=merge-duplicates"})
+        self._insert("config_revisions", {"path": path, "content": content, "author": author, "note": note})
+
+    def revert_config(self, path: str, author: str | None) -> None:
+        self._req("DELETE", "config_files", params={"path": f"eq.{path}"})
+        self._insert("config_revisions", {"path": path, "content": None, "author": author,
+                                          "note": "reverted to the repo version"})
+
+    def config_revisions(self, path: str, limit: int = 50) -> list[dict]:
+        return self._req("GET", "config_revisions", params={
+            "select": "id,path,content,note,author,saved_at", "path": f"eq.{path}",
+            "order": "saved_at.desc", "limit": str(limit)})
+
+    # --- interaction walkthrough for /admin ---
+    def list_interactions(self, limit: int = 50) -> list[dict]:
+        return self._req("GET", "interaction_summaries", params={
+            "select": "*", "order": "last_at.desc", "limit": str(limit)})
+
+    def interaction_events(self, interaction_id: str) -> list[dict]:
+        return self._req("GET", "interaction_events", params={
+            "select": "*", "interaction_id": f"eq.{interaction_id}", "order": "created_at.asc"})
+
+    def handoffs_for(self, interaction_id: str) -> list[dict]:
+        return self._req("GET", "handoffs", params={
+            "select": "*", "interaction_id": f"eq.{interaction_id}", "order": "created_at.asc"})
+
+    def tickets_by_id(self, ticket_ids: list[str]) -> list[dict]:
+        if not ticket_ids:
+            return []
+        return self._req("GET", "tickets", params={
+            "select": "ticket_id,code,unit,status,location,postal_code,fields,opened_at",
+            "ticket_id": f"in.({','.join(ticket_ids)})"})
+
 
 class MemoryStore:
     """In-memory store with the same methods as SupabaseStore."""
@@ -124,6 +176,8 @@ class MemoryStore:
         self.events: list[dict] = []
         self.documents: list[dict] = []
         self.chunks: list[dict] = []
+        self.configs: dict[str, dict] = {}
+        self.revisions: list[dict] = []
         self._ticket_seq = itertools.count(1)
         self._handoff_seq = itertools.count(1)
         self.fail: set[str] = set()   # method names that should raise (failure tests)
@@ -165,13 +219,16 @@ class MemoryStore:
         return row
 
     def log_event(self, row: dict) -> None:
-        self.events.append(row)
+        self.events.append({"created_at": _now().isoformat(), **row})
 
     def kb_search(self, query: str, embedding, top_k: int) -> list[dict]:
         self._check("kb_search")
         words = set(re.findall(r"\w{3,}", query.lower()))
+        active = {d["id"] for d in self.documents if d.get("active", True)}
         scored = []
         for c in self.chunks:
+            if c["document_id"] not in active:
+                continue
             score = len(words & set(re.findall(r"\w{3,}", c["content"].lower())))
             if score:
                 scored.append({**c, "score": score})
@@ -196,6 +253,69 @@ class MemoryStore:
         self.chunks = [c for c in self.chunks if c["document_id"] != document_id]
         self.chunks += [{**c, "title": doc["title"], "source": doc["source"]} for c in chunks]
         doc["chunked_at"] = _now().isoformat()
+
+    def list_documents(self) -> list[dict]:
+        return sorted(self.documents, key=lambda d: d["title"])
+
+    def update_document(self, document_id: str, fields: dict) -> dict | None:
+        doc = next((d for d in self.documents if d["id"] == document_id), None)
+        if doc is None:
+            return None
+        if any(fields.get(k, doc.get(k)) != doc.get(k) for k in ("content", "title")):
+            doc["chunked_at"] = None
+        doc.update(fields)
+        return doc
+
+    def delete_document(self, document_id: str) -> None:
+        self.documents = [d for d in self.documents if d["id"] != document_id]
+        self.chunks = [c for c in self.chunks if c["document_id"] != document_id]
+
+    def config_overrides(self) -> list[dict]:
+        return [{"path": p, **v} for p, v in self.configs.items()]
+
+    def save_config(self, path: str, content: str, author: str | None, note: str | None) -> None:
+        self.configs[path] = {"content": content, "updated_at": _now().isoformat(), "updated_by": author}
+        self.revisions.append({"id": len(self.revisions) + 1, "path": path, "content": content,
+                               "note": note, "author": author, "saved_at": _now().isoformat()})
+
+    def revert_config(self, path: str, author: str | None) -> None:
+        self.configs.pop(path, None)
+        self.revisions.append({"id": len(self.revisions) + 1, "path": path, "content": None,
+                               "note": "reverted to the repo version", "author": author,
+                               "saved_at": _now().isoformat()})
+
+    def config_revisions(self, path: str, limit: int = 50) -> list[dict]:
+        return [r for r in reversed(self.revisions) if r["path"] == path][:limit]
+
+    def list_interactions(self, limit: int = 50) -> list[dict]:
+        by_id: dict[str, list[dict]] = {}
+        for e in self.events:
+            by_id.setdefault(e["interaction_id"], []).append(e)
+        out = []
+        for iid, evs in by_id.items():
+            screens = [e for e in evs if e["step"] == "input_screen"]
+            out.append({
+                "interaction_id": iid, "started_at": evs[0].get("created_at"), "last_at": evs[-1].get("created_at"),
+                "events": len(evs), "turns": len(screens),
+                "models": ", ".join(sorted({e["model"] for e in evs if e.get("model")})) or None,
+                "rule_ids": sorted({e["rule_id"] for e in evs if e.get("rule_id")}) or None,
+                "tickets": sum(e["step"] == "tool:create_ticket" and e["outcome"] == "ok" for e in evs),
+                "handoffs": sum(e["step"] == "tool:handoff" and e["outcome"] == "ok" for e in evs),
+                "tokens_in": sum(e.get("tokens_in") or 0 for e in evs),
+                "tokens_out": sum(e.get("tokens_out") or 0 for e in evs),
+                "cost_usd": sum(e.get("cost_usd") or 0 for e in evs),
+                "first_message": screens[0]["text"] if screens else None,
+            })
+        return list(reversed(out))[:limit]
+
+    def interaction_events(self, interaction_id: str) -> list[dict]:
+        return [e for e in self.events if e["interaction_id"] == interaction_id]
+
+    def handoffs_for(self, interaction_id: str) -> list[dict]:
+        return [h for h in self.handoffs if h.get("interaction_id") == interaction_id]
+
+    def tickets_by_id(self, ticket_ids: list[str]) -> list[dict]:
+        return [t for t in self.tickets if t["ticket_id"] in ticket_ids]
 
 
 @lru_cache

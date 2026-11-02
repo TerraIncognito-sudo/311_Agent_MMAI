@@ -1,15 +1,16 @@
 """Web server for the chat site (owner: E). Run: python run.py serve
 
-Serves the static chat page and a small JSON API. The OpenRouter key arrives
-in the X-OpenRouter-Key header of each /api/chat request, is used for that
-one model call, and is never stored, logged or echoed back.
+Serves the static chat page, the /admin page (src/web/admin.py) and a small
+JSON API. The OpenRouter key arrives in the X-OpenRouter-Key header of each
+/api/chat request, is used for that one model call, and is never stored,
+logged or echoed back.
 """
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI, Header, HTTPException
+from fastapi import Depends, FastAPI, Header, HTTPException
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
@@ -19,12 +20,14 @@ from src.config import app_config
 from src.models.llm import LLMSelection, list_models
 from src.rag.ingest import start_sync
 from src.tools.store import MemoryStore, get_store
+from src.web import admin
 
 STATIC = Path(__file__).parent / "static"
 
+
 @asynccontextmanager
 async def lifespan(_app):
-    # Knowledge-base edits made in Supabase go live without a redeploy.
+    # Knowledge-base and config edits made in Supabase go live without a redeploy.
     stop = start_sync(app_config()["retrieval"].get("sync_interval_s", 0))
     yield
     if stop:
@@ -33,6 +36,7 @@ async def lifespan(_app):
 
 app = FastAPI(title="Gilead 311 Agent", docs_url=None, redoc_url=None, lifespan=lifespan)
 app.mount("/static", StaticFiles(directory=STATIC), name="static")
+app.include_router(admin.router)
 
 
 class ChatRequest(BaseModel):
@@ -45,6 +49,11 @@ class ChatRequest(BaseModel):
 @app.get("/")
 def index():
     return FileResponse(STATIC / "index.html")
+
+
+@app.get("/admin", dependencies=[Depends(admin._enabled)])
+def admin_page():
+    return FileResponse(STATIC / "admin.html")
 
 
 @app.get("/api/config")

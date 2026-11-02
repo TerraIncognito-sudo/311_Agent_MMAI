@@ -55,13 +55,16 @@ def get_session(interaction_id: str | None) -> Session:
 
 
 def system_prompt() -> str:
-    pol = policy()
-    wording = pol["wording"]
+    return render_system_prompt(policy(), load_prompt(app_config()["agent"]["system_prompt"]))
+
+
+def render_system_prompt(pol: dict, template: str) -> str:
+    """Fill the prompt template from the policy. Also used by /admin to check an edit before saving."""
     catalogue = "\n".join(f"  - {code}: {e['category']} (routes to {e['unit']})"
                           for code, e in pol["service_catalogue"].items())
-    return load_prompt(app_config()["agent"]["system_prompt"]).format(
+    return template.format(
         city=pol["city"], catalogue=catalogue, max_words=pol["thresholds"]["max_reply_words"],
-        **{f"w_{k}": v for k, v in wording.items()},
+        **{f"w_{k}": v for k, v in pol["wording"].items()},
     )
 
 
@@ -90,7 +93,7 @@ def _do_handoff(session: Session, rule_id: str, reason: str) -> str:
         "possible_duplicates": st.possible_duplicates, "reason": reason,
     })
     log_event(session, "tool:handoff", rule_id=rule_id, outcome="ok" if result["ok"] else "error",
-              text=reason if result["ok"] else result["error"])
+              text=json.dumps({"reason": reason, "result": result}))
     st.handed_off = True
     if not result["ok"]:
         # F4/E9: even the handoff failed; never claim anything was recorded.
@@ -102,6 +105,7 @@ def _do_handoff(session: Session, rule_id: str, reason: str) -> str:
 def _finish(session: Session, reply: str, rule_id: str | None = None) -> dict:
     session.transcript.append({"role": "assistant", "text": reply})
     session.messages.append({"role": "assistant", "content": reply})
+    log_event(session, "reply", rule_id=rule_id, text=reply)   # what the resident saw
     return {"interaction_id": session.interaction_id, "reply": reply, "rule_id": rule_id}
 
 
@@ -150,7 +154,8 @@ def _run_tool(session: Session, name: str, args: dict) -> tuple[dict, str | None
         failed = bool(result.get("_failure"))
         log_event(session, f"tool:{name}", latency_ms=latency, outcome="ok" if result["ok"] else "error",
                   rule_id="F5" if failed else None,
-                  text=json.dumps({"args": args, "error": result.get("_detail") or result.get("error")}))
+                  text=json.dumps({"args": args, "error": result.get("_detail") or result.get("error"),
+                                   "result": {k: v for k, v in result.items() if not k.startswith("_")}}))
         if not failed:
             break
     after = after_tool(st, name, args, result)   # records collected fields even on failure (F3)

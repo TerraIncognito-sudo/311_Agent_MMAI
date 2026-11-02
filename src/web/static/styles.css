@@ -1,31 +1,4 @@
-:root {
-  --bg: #ffffff;
-  --surface: #f4f4f5;
-  --surface-2: #ececee;
-  --border: #e2e2e5;
-  --text: #18181b;
-  --muted: #71717a;
-  --accent: #1f4e79;
-  --accent-text: #ffffff;
-  --error: #b42318;
-  --radius: 22px;
-  color-scheme: light;
-}
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #161618;
-    --surface: #222225;
-    --surface-2: #2c2c30;
-    --border: #333338;
-    --text: #ececef;
-    --muted: #9a9aa3;
-    --accent: #7fb2e5;
-    --accent-text: #0e1a26;
-    --error: #f97066;
-    color-scheme: dark;
-  }
-}
-
+/* Chat page. Colours come from tokens.css. */
 * { box-sizing: border-box; }
 html, body { height: 100%; }
 body {

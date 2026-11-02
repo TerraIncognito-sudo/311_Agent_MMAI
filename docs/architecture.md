@@ -39,8 +39,21 @@
 3. **Output check** (`src/guardrails/output_check.py`). A ticket ID or
    reference that no tool returned blocks the reply and hands off (M3).
    Commitment phrases (C1, C2, C4) are flagged in the log.
-4. **Logging.** Every model call and tool call is written to
-   `interaction_events` with masked text, tokens, latency and cost.
+4. **Logging.** Every model call, tool call (arguments and result) and the
+   final reply is written to `interaction_events` with masked text, tokens,
+   latency and cost. `/admin` replays these as a step-by-step walkthrough
+   against the policy's stages (screen, classify, policy lookup,
+   duplicates, fields, knowledge, escalate, ticket, reply).
+
+## Config edits in the browser
+
+`config/` in the repo holds the defaults. A file saved in `/admin` goes to
+Supabase `config_files` (history in `config_revisions`) and overrides the
+repo file until reverted (`src/config.py`). The save clears every cached
+config value, so new conversations use it at once; conversations already
+open keep the system prompt they started with. Edits made straight in the
+Supabase table are picked up by the server's sync thread within
+`retrieval.sync_interval_s`.
 
 ## State
 

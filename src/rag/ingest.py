@@ -21,7 +21,7 @@ import hashlib
 import threading
 from pathlib import Path
 
-from src.config import app_config
+from src.config import app_config, refresh_overrides
 from src.rag.embeddings import embed
 from src.tools.store import get_store
 
@@ -71,7 +71,15 @@ def import_files(store, directory: Path) -> int:
     return n
 
 
+_chunk_lock = threading.Lock()   # the sync thread and /admin saves both chunk
+
+
 def chunk_stale(store) -> int:
+    with _chunk_lock:
+        return _chunk_stale(store)
+
+
+def _chunk_stale(store) -> int:
     cfg = app_config()["retrieval"]
     n = 0
     for doc in store.documents_needing_chunks():
@@ -86,8 +94,9 @@ def chunk_stale(store) -> int:
 
 
 def start_sync(interval_s: float, store=None) -> threading.Event | None:
-    """Re-chunk dashboard edits every `interval_s` seconds in a background
-    thread. Returns an Event that stops the loop, or None if disabled."""
+    """Every `interval_s` seconds, in a background thread: re-chunk KB edits
+    and pick up config/ edits made in the Supabase dashboard. Returns an
+    Event that stops the loop, or None if disabled."""
     if interval_s <= 0:
         return None
     stop = threading.Event()
@@ -97,9 +106,11 @@ def start_sync(interval_s: float, store=None) -> threading.Event | None:
             try:
                 n = chunk_stale(store or get_store())
                 if n:
-                    print(f"[kb sync] re-chunked {n} document(s)")
+                    print(f"[sync] re-chunked {n} document(s)")
+                if refresh_overrides():
+                    print("[sync] applied config edits from Supabase")
             except Exception as e:   # Supabase or the embedding model is down; try again next round
-                print(f"[kb sync] failed: {type(e).__name__}: {e}")
+                print(f"[sync] failed: {type(e).__name__}: {e}")
             if stop.wait(interval_s):
                 return
 

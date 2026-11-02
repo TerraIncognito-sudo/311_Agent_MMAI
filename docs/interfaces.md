@@ -16,6 +16,7 @@ Supabase. They are marked **proposed** until D's Nov 5 interface session.
 | LLM backbone (proposed) | D/C | `src/models/llm.py` | W4, W5, W6 |
 | Knowledge base (proposed) | D/A | Supabase `kb_documents`, `kb_chunks` | W4, RAG team |
 | Web API (proposed) | E | `src/web/server.py` | W5 demo |
+| Admin API and config edits (proposed) | E | `src/web/admin.py`; Supabase `config_files`, `config_revisions` | whole team |
 
 ## Interaction record (A)
 
@@ -65,7 +66,9 @@ Supabase table `interaction_events`:
 `event_id, interaction_id, step, model, tokens_in, tokens_out, cost_usd, latency_ms, rule_id, outcome, text (masked)` (+ `created_at`)
 
 `step` values written today: `input_screen`, `model`, `tool:<name>`,
-`output_check`, `rule`. `model` is `provider:model_id`. `cost_usd` is
+`output_check`, `rule`, `reply` (the text the resident was shown).
+For `tool:<name>` the text is JSON `{args, error, result}`; for
+`tool:handoff` it is `{reason, result}`. `model` is `provider:model_id`. `cost_usd` is
 OpenRouter's reported cost, 0 for Ollama.
 
 ## Results file (F)
@@ -101,3 +104,27 @@ then E9) from setup problems (bad key, unknown model; shown to the user).
 | GET | `/api/models` | `?provider=ollama\|openrouter` | models with tool support |
 | POST | `/api/chat` | `{interaction_id?, message, provider, model}` + header `X-OpenRouter-Key` (OpenRouter only) | `{interaction_id, reply, rule_id}` |
 | GET | `/api/health` | | `{ok, store: supabase\|memory}` |
+
+## Admin API and config edits (proposed)
+
+The `/admin` page and `/api/admin/*` (no login yet; `ADMIN_ENABLED=0` turns
+both off). Everything returned about conversations is masked (D6).
+
+| Method | Path | Body / query | Returns |
+|---|---|---|---|
+| GET | `/api/admin/interactions` | `?limit=` | rows of the `interaction_summaries` view, newest first |
+| GET | `/api/admin/interactions/{id}` | | `{events (with parsed data), handoffs, tickets}` |
+| GET | `/api/admin/rules` | | policy rule text by ID, catalogue codes |
+| GET | `/api/admin/files` | | editable files, whether each is edited in the browser |
+| GET / PUT / DELETE | `/api/admin/file` | `?path=`; PUT `{content, author?, note?}` | read, save (checked first, 422 with `errors`), revert to repo |
+| GET | `/api/admin/revisions` | `?path=` | save history for a file |
+| GET / POST | `/api/admin/kb` | POST `{title, content, source?, active?}` | documents; create |
+| PUT / DELETE | `/api/admin/kb/{id}` | PUT as POST | update; delete |
+
+Config edits: `config_files(path, content, updated_at, updated_by)` holds
+the browser version of a `config/` file and wins over the repo file until
+reverted; `config_revisions(id, path, content, note, author, saved_at)` keeps
+every save (`content` null = reverted). Editable: `app.yaml`, `policy.yaml`,
+`guardrails.yaml`, `prompts/<folder>/<name>.md|.txt`. A save is refused if
+the YAML doesn't parse, a key the code reads (present in the repo version)
+is missing, a regex doesn't compile, or the system prompt doesn't render.

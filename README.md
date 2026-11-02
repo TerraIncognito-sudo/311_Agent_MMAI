@@ -8,6 +8,9 @@ on the City's behalf. The rules it follows are in the operating policy
 **All data is synthetic.** No real residents, addresses or City systems.
 
 - Chat site: plain chat page, choose the model in the top-right corner.
+- Admin page at `/admin`: walk through any conversation step by step
+  against the operating policy, and edit config, prompts and the knowledge
+  base in the browser (live, with history). No login yet.
 - LLM backbone: local **Ollama** or **OpenRouter** (bring your own key, kept in
   the browser tab's memory only and never saved).
 - Database and knowledge base: **Supabase** (Postgres + pgvector).
@@ -49,8 +52,9 @@ See [docs/deployment.md](docs/deployment.md) for updates, logs and the Cloudflar
 4. Add knowledge-base articles as rows in `kb_documents` (see below).
 
 Tables: `tickets`, `handoffs`, `interaction_events` (event log),
-`kb_documents`, `kb_chunks`. Collaborators can browse and edit them in the
-Supabase Table Editor.
+`kb_documents`, `kb_chunks`, `config_files` and `config_revisions` (browser
+edits of `config/`). Collaborators can browse and edit them in the Supabase
+Table Editor, or use `/admin`.
 
 ## Working on the knowledge base (RAG)
 
@@ -73,12 +77,33 @@ returned them (policy rule C5).
   `chunked_at = null` on every `kb_documents` row so they are re-embedded.
 - Tuning knobs (`top_k`, chunk size, overlap) are in `config/app.yaml`.
 
+## Admin page (`/admin`)
+
+- **Interactions:** every conversation, live from `interaction_events`.
+  Pick one and press *Walk through* (or use the arrow keys) to step through
+  it: input screen, each model and tool call with its arguments and result,
+  the rules that fired, the policy stage it belongs to, and the final reply.
+  Tickets and handoffs it created are shown from the database. Tick
+  *Follow newest* and chat on the main site to watch a conversation live.
+- **Files:** edit `config/policy.yaml`, `guardrails.yaml`, `app.yaml` and
+  prompts. A save is checked first (YAML, keys the code reads, regexes, the
+  system prompt renders), then goes live for new conversations. Every save
+  is kept (*History*), *Revert to repo* undoes it, and *Download* gives you
+  the file to commit. *New prompt* starts e.g. `prompts/agent/system_v2.md`;
+  point `agent.system_prompt` in `app.yaml` at it to switch.
+- **Knowledge base:** create, edit, hide or delete documents; they are
+  searchable by the agent as soon as you save.
+
+Browser edits live in Supabase (`config_files`) and override the repo files
+until reverted; the repo files remain the reviewed defaults the tests use.
+
 ## Working on the LLM / prompts
 
 - Agent system prompt: `config/prompts/agent/`. Classifier, judge and
   data-generation prompts go in their own folders under `config/prompts/`.
   Prompts and policy live in `config/`, never in code.
-- Record every prompt change in [docs/prompt_changelog.md](docs/prompt_changelog.md).
+- Record every prompt change in [docs/prompt_changelog.md](docs/prompt_changelog.md),
+  including ones made in `/admin` (add a note when you save; the history keeps it too).
 - The classifier is a keyword stub behind `classify(text) -> {code, confidence, top2}`
   in `src/models/classifier.py`; swap in the real model without changing the signature.
 - Every model call is logged to `interaction_events` with `provider:model`,
@@ -93,7 +118,7 @@ src/tools/         policy_lookup, search_tickets, create_ticket, get_status, han
 src/models/        LLM backbone (Ollama/OpenRouter), classify()
 src/guardrails/    input screen, masking/redaction, output check
 src/rag/           knowledge-base sync (chunking) and embeddings
-src/web/           FastAPI server + static chat page
+src/web/           FastAPI server, static chat page, /admin page and API
 src/data_gen/      synthetic data generation (W2)
 src/eval/          evaluation harness (W5/W6)
 supabase/          SQL migrations and seed data

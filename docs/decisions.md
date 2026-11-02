@@ -54,3 +54,15 @@ alternatives, and why. The report draws on this file directly.
 * **Chose:** `kb_documents` in Supabase is the single source of knowledge-base content; the `data/kb/` files were removed (their content was already in Supabase). The server re-chunks new and edited rows every `retrieval.sync_interval_s` seconds in a background thread.
 * **Alternatives:** Markdown files in the repo loaded by `python run.py ingest` (the first version); chunking inside Postgres with a trigger.
 * **Why:** the RAG team can change what the agent knows from the dashboard without touching the repo or the server, and the deployed site only changes for structural changes. Chunking stays in Python so it can also call the embedding model, which a Postgres trigger can't.
+
+## D-010 Admin page; config edits stored in Supabase (2026-11-02)
+
+* **Chose:** an `/admin` page with a live, step-by-step walkthrough of each conversation from `interaction_events`, and browser editing of `config/` files and the knowledge base. A saved config file goes to Supabase `config_files` and overrides the repo file until reverted; every save is kept in `config_revisions`.
+* **Alternatives:** writing edits to the server's checkout (a dirty checkout breaks `git pull`, and edits would vanish on the next clone); editing only through pull requests (D-002).
+* **Why:** teammates tuning prompts, policy and guardrails see the effect on the live agent at once, without a redeploy. This amends D-002: the repo files stay the reviewed defaults and the tests run against them; a browser edit worth keeping is downloaded from `/admin` and committed. Saves that would break the agent (bad YAML, a missing key the code reads, a bad regex, a prompt that won't render) are refused.
+* **Risk:** no login yet, by request, for the prototype. See docs/deployment.md section 3.
+
+## D-011 D2 card pattern skips ticket numbers (2026-11-02)
+
+* **Chose:** `payment_card` in `config/guardrails.yaml` no longer matches `311-YYYY-NNNNNN`.
+* **Why:** ticket numbers have 13 digits, so the card pattern redacted them: in the logs, and in a resident's own status request before the model saw it, which broke A5 status lookups. Found by the admin walkthrough test (`tests/test_guardrails.py::test_d2_keeps_ticket_numbers`).

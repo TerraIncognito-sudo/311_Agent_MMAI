@@ -37,7 +37,8 @@ input_screen:
 redaction:
   # D2 [hard]: never stored; replaced before storage AND before the model sees it
   sin: '\b\d{3}[ -]?\d{3}[ -]?\d{3}\b'
-  payment_card: '\b(?:\d[ -]?){13,16}\b'
+  # Skips 311 ticket numbers (311-2026-000123), which also have 13 digits.
+  payment_card: '\b(?!311-\d{4}-\d{6}\b)(?:\d[ -]?){13,16}\b'
   date_of_birth: '\b(?:dob|date of birth|born on)\b[^.\n]{0,25}\d'
   health_card: '\b\d{4}[ -]?\d{3}[ -]?\d{3}[ -]?[A-Z]{2}\b'
 

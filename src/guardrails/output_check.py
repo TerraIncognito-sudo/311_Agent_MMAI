@@ -11,9 +11,8 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
-from functools import lru_cache
 
-from src.config import guardrails_config
+from src.config import config_cache, guardrails_config
 
 
 @dataclass
@@ -23,7 +22,7 @@ class OutputResult:
     rule_id: str | None = None
 
 
-@lru_cache
+@config_cache
 def _patterns():
     cfg = guardrails_config()["output_check"]
     return (
@@ -34,7 +33,7 @@ def _patterns():
     )
 
 
-@lru_cache
+@config_cache
 def _rule_tag():
     return re.compile(guardrails_config()["output_check"]["rule_id_tag"], re.IGNORECASE)
 

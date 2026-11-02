@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>311 Admin</title>
+  <meta name="robots" content="noindex">
+  <link rel="stylesheet" href="/static/tokens.css">
+  <link rel="stylesheet" href="/static/admin.css">
+</head>
+<body>
+  <header class="bar">
+    <div class="brand"><span id="site-title">311</span> <span class="brand-sub">Admin</span></div>
+    <nav class="tabs" role="tablist">
+      <button role="tab" data-tab="interactions" aria-selected="true">Interactions</button>
+      <button role="tab" data-tab="files">Files</button>
+      <button role="tab" data-tab="kb">Knowledge base</button>
+    </nav>
+    <div class="bar-right">
+      <label class="who"><span>Your name</span><input id="author" maxlength="80" placeholder="for the edit history" autocomplete="off"></label>
+      <a class="link" href="/" target="_blank" rel="noopener">Open chat ↗</a>
+    </div>
+  </header>
+  <p class="proto">Prototype: no login. Anyone with this link can read the masked logs and change how the agent behaves.</p>
+
+  <!-- Interactions: live walkthrough against the operating policy -->
+  <section id="tab-interactions" class="tab-panel split">
+    <aside class="list-pane">
+      <div class="pane-head">
+        <strong>Conversations</strong>
+        <label class="toggle"><input id="follow" type="checkbox"> Follow newest</label>
+      </div>
+      <div id="int-list" class="list" aria-live="polite"></div>
+      <p id="int-status" class="hint pad"></p>
+    </aside>
+    <div class="detail-pane" id="int-detail">
+      <div class="empty-state">Pick a conversation to walk through it step by step.<br>New conversations on the chat site appear here within a few seconds.</div>
+    </div>
+  </section>
+
+  <!-- Files: config/ edited in the browser, stored in Supabase with history -->
+  <section id="tab-files" class="tab-panel split" hidden>
+    <aside class="list-pane">
+      <div class="pane-head">
+        <strong>config/</strong>
+        <button id="new-prompt" class="btn small">New prompt</button>
+      </div>
+      <div id="file-list" class="list"></div>
+    </aside>
+    <div class="detail-pane editor-pane" id="file-detail">
+      <div class="empty-state">Pick a file to edit. Saves are checked before they go live, kept in a history, and can be reverted to the repo version.</div>
+    </div>
+  </section>
+
+  <!-- Knowledge base: kb_documents in Supabase -->
+  <section id="tab-kb" class="tab-panel split" hidden>
+    <aside class="list-pane">
+      <div class="pane-head">
+        <strong>Documents</strong>
+        <button id="new-doc" class="btn small">New document</button>
+      </div>
+      <div id="kb-list" class="list"></div>
+    </aside>
+    <div class="detail-pane editor-pane" id="kb-detail">
+      <div class="empty-state">Pick a document to edit. The agent can only state facts about City services that come from these documents (rule C5).</div>
+    </div>
+  </section>
+
+  <script src="/static/admin.js"></script>
+</body>
+</html>

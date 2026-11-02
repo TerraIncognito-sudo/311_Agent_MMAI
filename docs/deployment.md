@@ -78,6 +78,13 @@ and add a published application route for your hostname pointing to
 
 ## 3. Things to know before sharing the link
 
+- **`/admin` has no login.** Anyone with the link can read the masked
+  conversation logs, edit the policy, prompts and guardrails the live agent
+  uses, and edit the knowledge base. Before sharing the site beyond the
+  team, protect `311.scurrycat.ca/admin*` and `/api/admin*` with Cloudflare
+  Access (Zero Trust > Access > Applications, an email allow-list), or set
+  `ADMIN_ENABLED=0` in `.env` and restart to switch the page off.
+
 - **Ollama is your hardware.** Anyone with the link who picks "Local
   (Ollama)" runs models on this machine. To limit who can use the site, put
   it behind Cloudflare Access (Zero Trust > Access > Applications) with an

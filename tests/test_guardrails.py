@@ -19,6 +19,12 @@ def test_d2_redacts_sin_and_card():
     assert "sin" in found
 
 
+def test_d2_keeps_ticket_numbers():
+    # A5: residents type their ticket number for a status check; it has 13 digits like a card.
+    text, found = redact("status of 311-2026-000123 please, card 4111-1111-1111-1111")
+    assert "311-2026-000123" in text and "4111" not in text and found == ["payment_card"]
+
+
 def test_e1_emergency_flag():
     assert screen("I smell gas in the hallway").has("emergency")
     assert screen("there's a live wire down on my street").has("emergency")

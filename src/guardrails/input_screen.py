@@ -11,9 +11,8 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
-from functools import lru_cache
 
-from src.config import guardrails_config
+from src.config import config_cache, guardrails_config
 from src.guardrails.masking import redact
 
 
@@ -27,7 +26,7 @@ class ScreenResult:
         return flag in self.flags
 
 
-@lru_cache
+@config_cache
 def _patterns() -> dict[str, list[re.Pattern]]:
     cfg = guardrails_config()["input_screen"]
     return {name: [re.compile(p, re.IGNORECASE) for p in pats] for name, pats in cfg.items()}

@@ -8,18 +8,17 @@ mask(): replaces personal details with tags such as [PHONE] (D6) — applied
 from __future__ import annotations
 
 import re
-from functools import lru_cache
 
-from src.config import guardrails_config
+from src.config import config_cache, guardrails_config
 
 
-@lru_cache
+@config_cache
 def _redaction_patterns() -> list[tuple[str, re.Pattern]]:
     cfg = guardrails_config()["redaction"]
     return [(name, re.compile(p, re.IGNORECASE)) for name, p in cfg.items()]
 
 
-@lru_cache
+@config_cache
 def _masking_patterns() -> list[tuple[str, re.Pattern]]:
     cfg = guardrails_config()["masking"]
     return [(name, re.compile(p)) for name, p in cfg.items()]
