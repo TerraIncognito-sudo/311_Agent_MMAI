@@ -25,8 +25,5 @@ services:
       # 127.0.0.1 = reachable only from this machine (cloudflared runs here).
       # Set PUBLISH_ADDRESS=0.0.0.0 in .env to also reach it from the LAN.
       - "${PUBLISH_ADDRESS:-127.0.0.1}:8311:8311"
-    volumes:
-      # Config is mounted so policy/prompt edits apply after `git pull` +
-      # `docker compose restart`, without a rebuild. The knowledge base lives
-      # only in Supabase and is read live; it needs neither.
-      - ./config:/app/config:ro
+    # No volumes: policy, prompts, guardrails, the interaction tree and the
+    # knowledge base all live in Supabase and are read live (edit at /admin).

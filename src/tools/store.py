@@ -2,7 +2,8 @@
 
 SupabaseStore talks to Supabase's REST API (PostgREST) with the server-side
 service key. MemoryStore is a drop-in for tests and for running without
-Supabase (USE_MEMORY_STORE=1); nothing persists across restarts.
+Supabase (USE_MEMORY_STORE=1); it starts with the config test fixture and
+nothing persists across restarts.
 
 Tables are defined in supabase/migrations/. Tools call the store; nothing
 else in the agent touches the database directly.
@@ -17,7 +18,7 @@ from functools import lru_cache
 
 import httpx
 
-from src.config import env
+from src.config import env, fixture_files
 
 
 class StoreError(RuntimeError):
@@ -126,8 +127,8 @@ class SupabaseStore:
     def delete_document(self, document_id: str) -> None:
         self._req("DELETE", "kb_documents", params={"id": f"eq.{document_id}"})
 
-    # --- config edits from /admin (src/config.py) ---
-    def config_overrides(self) -> list[dict]:
+    # --- configuration (src/config.py); edited in /admin ---
+    def list_config(self) -> list[dict]:
         return self._req("GET", "config_files", params={"select": "path,content,updated_at,updated_by"})
 
     def save_config(self, path: str, content: str, author: str | None, note: str | None) -> None:
@@ -136,10 +137,9 @@ class SupabaseStore:
                   headers={"Prefer": "return=minimal,resolution=merge-duplicates"})
         self._insert("config_revisions", {"path": path, "content": content, "author": author, "note": note})
 
-    def revert_config(self, path: str, author: str | None) -> None:
+    def delete_config(self, path: str, author: str | None) -> None:
         self._req("DELETE", "config_files", params={"path": f"eq.{path}"})
-        self._insert("config_revisions", {"path": path, "content": None, "author": author,
-                                          "note": "reverted to the repo version"})
+        self._insert("config_revisions", {"path": path, "content": None, "author": author, "note": "deleted"})
 
     def config_revisions(self, path: str, limit: int = 50) -> list[dict]:
         return self._req("GET", "config_revisions", params={
@@ -170,13 +170,14 @@ class SupabaseStore:
 class MemoryStore:
     """In-memory store with the same methods as SupabaseStore."""
 
-    def __init__(self):
+    def __init__(self, config: dict[str, str] | None = None):
         self.tickets: list[dict] = []
         self.handoffs: list[dict] = []
         self.events: list[dict] = []
         self.documents: list[dict] = []
         self.chunks: list[dict] = []
-        self.configs: dict[str, dict] = {}
+        self.configs: dict[str, dict] = {p: {"content": c, "updated_at": _now().isoformat(), "updated_by": "fixture"}
+                                          for p, c in (config or {}).items()}
         self.revisions: list[dict] = []
         self._ticket_seq = itertools.count(1)
         self._handoff_seq = itertools.count(1)
@@ -270,7 +271,8 @@ class MemoryStore:
         self.documents = [d for d in self.documents if d["id"] != document_id]
         self.chunks = [c for c in self.chunks if c["document_id"] != document_id]
 
-    def config_overrides(self) -> list[dict]:
+    def list_config(self) -> list[dict]:
+        self._check("list_config")
         return [{"path": p, **v} for p, v in self.configs.items()]
 
     def save_config(self, path: str, content: str, author: str | None, note: str | None) -> None:
@@ -278,11 +280,10 @@ class MemoryStore:
         self.revisions.append({"id": len(self.revisions) + 1, "path": path, "content": content,
                                "note": note, "author": author, "saved_at": _now().isoformat()})
 
-    def revert_config(self, path: str, author: str | None) -> None:
+    def delete_config(self, path: str, author: str | None) -> None:
         self.configs.pop(path, None)
         self.revisions.append({"id": len(self.revisions) + 1, "path": path, "content": None,
-                               "note": "reverted to the repo version", "author": author,
-                               "saved_at": _now().isoformat()})
+                               "note": "deleted", "author": author, "saved_at": _now().isoformat()})
 
     def config_revisions(self, path: str, limit: int = 50) -> list[dict]:
         return [r for r in reversed(self.revisions) if r["path"] == path][:limit]
@@ -322,5 +323,5 @@ class MemoryStore:
 def get_store():
     url, key = env("SUPABASE_URL"), env("SUPABASE_SERVICE_KEY")
     if env("USE_MEMORY_STORE", "0") == "1" or not (url and key):
-        return MemoryStore()
+        return MemoryStore(config=fixture_files())
     return SupabaseStore(url, key)

@@ -1,4 +1,4 @@
-"""Embeddings for the knowledge base (optional; see config/app.yaml retrieval).
+"""Embeddings for the knowledge base (optional; see app.yaml retrieval in the Supabase config).
 
 With embedding_provider "none" this returns None and retrieval falls back to
 Postgres full-text search. The model and dimensions must match the

@@ -1,13 +1,17 @@
-"""Loads everything under config/ plus environment variables from .env.
+"""Loads the agent's configuration from Supabase, plus environment variables from .env.
 
-Prompts and policy live in config/, never in code (team working agreement).
+Every config file (app.yaml, policy.yaml, guardrails.yaml, flow.yaml and the
+prompts under prompts/) lives ONLY in Supabase `config_files`; every save is
+kept in `config_revisions`. There is no copy in the repo for the site to fall
+back on, so nothing can go stale. Edit them in /admin.
 
-The files in the repo are the defaults. A file edited in the /admin page is
-saved to Supabase (`config_files`, with every save kept in
-`config_revisions`) and that version wins until it is reverted. Edits apply
-without a redeploy: the admin save calls reload(), and the server's sync
-thread calls refresh_overrides() to pick up edits made in the Supabase
-dashboard.
+- An /admin save calls reload(), so new conversations use it at once.
+- The server's sync thread calls refresh() to pick up edits made in the
+  Supabase dashboard.
+- If Supabase is unreachable, the last version loaded keeps being used.
+
+Tests and offline runs (USE_MEMORY_STORE=1) use the in-memory store, which
+starts from the fixture in tests/fixtures/config/. The site never reads it.
 """
 from __future__ import annotations
 
@@ -21,16 +25,20 @@ import yaml
 from dotenv import load_dotenv
 
 ROOT = Path(__file__).resolve().parent.parent
-CONFIG_DIR = ROOT / "config"
-PROMPTS_DIR = CONFIG_DIR / "prompts"
+FIXTURE_DIR = ROOT / "tests" / "fixtures" / "config"
 
 load_dotenv(ROOT / ".env")
 
-# Files the admin page may edit or create: the three YAML files and prompts.
-EDITABLE = re.compile(r"^(app|policy|guardrails)\.yaml$|^prompts/[a-z0-9_]+/[A-Za-z0-9_.-]+\.(md|txt)$")
+# Config files: the four YAML files and prompts/<folder>/<name>.md|.txt.
+EDITABLE = re.compile(r"^(app|policy|guardrails|flow)\.yaml$|^prompts/[a-z0-9_]+/[A-Za-z0-9_.-]+\.(md|txt)$")
 
-_overrides: dict[str, str] | None = None
-_overrides_lock = threading.Lock()
+
+class ConfigUnavailable(RuntimeError):
+    """Supabase couldn't be reached and no config has been loaded yet."""
+
+
+_files: dict[str, str] | None = None
+_lock = threading.Lock()
 _dependents = []   # cache_clear functions of caches built from config
 
 
@@ -41,60 +49,51 @@ def config_cache(fn):
     return cached
 
 
-def _fetch_overrides() -> dict[str, str]:
+def _fetch() -> dict[str, str]:
     from src.tools.store import get_store   # store imports this module
-    try:
-        return {r["path"]: r["content"] for r in get_store().config_overrides()}
-    except Exception as e:   # Supabase down: run on the repo defaults
-        print(f"[config] could not load edits from Supabase, using repo files: {type(e).__name__}")
-        return {}
+    return {r["path"]: r["content"] for r in get_store().list_config()}
 
 
-def overrides() -> dict[str, str]:
-    global _overrides
-    with _overrides_lock:
-        if _overrides is None:
-            _overrides = _fetch_overrides()
-        return _overrides
+def files() -> dict[str, str]:
+    """Every config file by path, as last loaded from Supabase."""
+    global _files
+    with _lock:
+        if _files is None:
+            try:
+                _files = _fetch()
+            except Exception as e:
+                raise ConfigUnavailable(f"could not load the configuration from Supabase: {type(e).__name__}") from e
+        return _files
 
 
 def reload() -> None:
-    """Drop every cached config value; the next read uses the latest edits."""
-    global _overrides
-    with _overrides_lock:
-        _overrides = None
+    """Drop every cached config value; the next read fetches from Supabase."""
+    global _files
+    with _lock:
+        _files = None
     for clear in _dependents:
         clear()
 
 
-def refresh_overrides() -> bool:
-    """Re-read edits from Supabase; reload if any changed. Returns whether they did."""
-    fresh = _fetch_overrides()
-    if fresh == overrides():
-        return False
-    reload()
+def refresh() -> bool:
+    """Re-read config from Supabase; reload if anything changed. Returns whether it did.
+    On failure the current version stays in use."""
+    global _files
+    fresh = _fetch()
+    with _lock:
+        if fresh == _files:
+            return False
+        _files = fresh
+    for clear in _dependents:
+        clear()
     return True
 
 
-def repo_file(rel: str) -> str | None:
-    path = CONFIG_DIR / rel
-    return path.read_text(encoding="utf-8") if path.is_file() else None
-
-
-def read_config_file(rel: str) -> str:
-    """Current text of a config file: the admin edit if there is one, else the repo file."""
-    text = overrides().get(rel)
+def read_config_file(path: str) -> str:
+    text = files().get(path)
     if text is None:
-        text = repo_file(rel)
-    if text is None:
-        raise FileNotFoundError(f"config/{rel}")
+        raise FileNotFoundError(f"config file {path!r} is not in Supabase config_files")
     return text
-
-
-def config_files() -> list[str]:
-    """Every editable file: the repo's plus any created in the admin page."""
-    repo = [p.relative_to(CONFIG_DIR).as_posix() for p in CONFIG_DIR.rglob("*") if p.is_file()]
-    return sorted({f for f in repo + list(overrides()) if EDITABLE.match(f)})
 
 
 def _load_yaml(name: str) -> dict:
@@ -116,8 +115,19 @@ def guardrails_config() -> dict:
     return _load_yaml("guardrails.yaml")
 
 
+@config_cache
+def flow_config() -> dict:
+    return _load_yaml("flow.yaml")
+
+
 def load_prompt(relative_path: str) -> str:
     return read_config_file(f"prompts/{relative_path}")
+
+
+def fixture_files() -> dict[str, str]:
+    """The test fixture (tests and USE_MEMORY_STORE=1 only)."""
+    return {p.relative_to(FIXTURE_DIR).as_posix(): p.read_text(encoding="utf-8")
+            for p in FIXTURE_DIR.rglob("*") if p.is_file() and EDITABLE.match(p.relative_to(FIXTURE_DIR).as_posix())}
 
 
 def env(name: str, default: str | None = None) -> str | None:

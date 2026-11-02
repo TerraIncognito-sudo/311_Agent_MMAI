@@ -1,8 +1,9 @@
-"""Deterministic rules layer (owner: D). Can overrule the model.
+"""Conversation state the interaction tree decides on (owner: D).
 
-before_tool() runs before every tool call and may block it with an error the
-model sees. after_tool() records what tools returned and may force a handoff.
-Each check cites the [hard] rule it enforces.
+record() runs after every tool call and keeps the facts the tree's checks
+read: which codes were looked up (A2), tickets and IDs returned (A8, M3),
+attempts per missing field (E6), how often the classifier was unsure (E3).
+The decisions themselves are nodes in flow.yaml (src/agent/flow.py).
 """
 from __future__ import annotations
 
@@ -17,6 +18,7 @@ class RuleState:
     ticket_ids: set[str] = field(default_factory=set)       # A8, M3
     known_ids: set[str] = field(default_factory=set)        # M3: every ID a tool returned
     field_attempts: dict[str, int] = field(default_factory=dict)  # E6
+    unsure_count: int = 0                                   # E3
     handed_off: bool = False
     code: str | None = None
     confidence: float | None = None
@@ -24,31 +26,27 @@ class RuleState:
     possible_duplicates: list[dict] = field(default_factory=list)
 
 
-@dataclass
-class Decision:
-    allow: bool = True
-    error: str | None = None
-    rule_id: str | None = None
-    force_handoff: str | None = None   # rule ID to hand off under
+def unsure_reason(result: dict) -> str | None:
+    """E3/F2: why a classifier result is too unsure to act on, or None if it is sure."""
+    t = policy()["thresholds"]
+    code, conf = result.get("code"), result.get("confidence") or 0.0
+    if not result.get("ok", True) or code not in policy()["service_catalogue"]:
+        return f"no valid code ({code or 'none'}), treated as confidence 0 (F2)"
+    if conf < t["classifier_confidence"]:
+        return f"{code} at {conf:.2f}, below {t['classifier_confidence']:.2f}"
+    top2 = result.get("top2") or []
+    if len(top2) > 1 and top2[0]["confidence"] - top2[1]["confidence"] < t["classifier_top2_margin"]:
+        return (f"{top2[0]['code']} {top2[0]['confidence']:.2f} vs {top2[1]['code']} "
+                f"{top2[1]['confidence']:.2f}, within {t['classifier_top2_margin']:.2f}")
+    return None
 
 
-def before_tool(state: RuleState, name: str, args: dict) -> Decision:
-    if name == "create_ticket":
-        code = (args.get("code") or "").upper()
-        if state.handed_off:
-            return Decision(False, "this request was already handed off; do not create a ticket", "A4")
-        if state.ticket_ids:
-            return Decision(False, "a ticket was already created for this request (A8)", "A8")
-        if code not in state.looked_up:
-            return Decision(False, f"call policy_lookup for {code} before creating a ticket (A2)", "A2")
-    if name == "get_status" and not (args.get("ticket_id") and args.get("postal_code")):
-        return Decision(False, "ask for both the ticket number and the postal code on it (D5)", "D5")
-    return Decision()
-
-
-def after_tool(state: RuleState, name: str, args: dict, result: dict) -> Decision:
-    if name == "classifier" and result.get("ok"):
-        state.code, state.confidence = result.get("code"), result.get("confidence")
+def record(state: RuleState, name: str, args: dict, result: dict) -> None:
+    if name == "classifier":
+        if result.get("ok", True):
+            state.code, state.confidence = result.get("code"), result.get("confidence")
+        if unsure_reason(result):
+            state.unsure_count += 1
     elif name == "policy_lookup" and result.get("ok"):
         state.looked_up.add(result["code"])
         state.code = result["code"]
@@ -56,20 +54,14 @@ def after_tool(state: RuleState, name: str, args: dict, result: dict) -> Decisio
         state.possible_duplicates = result.get("tickets", [])
         state.known_ids.update(t["ticket_id"] for t in state.possible_duplicates)
     elif name == "create_ticket":
-        state.fields = {**state.fields, **(args.get("fields") or {})}
+        state.fields = {**state.fields, **(args.get("fields") or {})}   # kept even on failure (F3)
         if result.get("ok"):
             state.ticket_ids.add(result["ticket_id"])
             state.known_ids.add(result["ticket_id"])
-        elif result.get("missing"):
-            # E6 [hard]: count failed attempts per field; hand off past the limit.
-            limit = policy()["thresholds"]["max_field_attempts"]
-            for f in result["missing"]:
-                state.field_attempts[f] = state.field_attempts.get(f, 0) + 1
-                if state.field_attempts[f] > limit:
-                    return Decision(force_handoff="E6", rule_id="E6")
+        for f in result.get("missing") or []:
+            state.field_attempts[f] = state.field_attempts.get(f, 0) + 1
     elif name == "get_status" and result.get("ok"):
         state.known_ids.add(result["ticket_id"])
     elif name == "handoff" and result.get("ok"):
         state.handed_off = True
         state.known_ids.add(result["ref_id"])
-    return Decision()

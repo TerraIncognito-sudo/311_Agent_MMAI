@@ -11,7 +11,7 @@ import re
 
 from src.tools.policy import valid_codes
 
-# Stub vocabulary only; the real classifier's prompts live in config/prompts/classifier/.
+# Stub vocabulary only; the real classifier's prompts go in prompts/classifier/ (Supabase config, /admin).
 _KEYWORDS = {
     "SW-BIN": ["bin", "cart", "lid", "container", "broken bin", "stolen bin"],
     "SW-MISS": ["missed", "not picked up", "wasn't collected", "collection", "pickup", "garbage day"],

@@ -1,4 +1,4 @@
-"""policy_lookup(code) — A2 (owner: D). Reads config/policy.yaml only."""
+"""policy_lookup(code) — A2 (owner: D). Reads policy.yaml (Supabase config) only."""
 from __future__ import annotations
 
 from src.config import policy

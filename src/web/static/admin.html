@@ -13,6 +13,7 @@
     <div class="brand"><span id="site-title">311</span> <span class="brand-sub">Admin</span></div>
     <nav class="tabs" role="tablist">
       <button role="tab" data-tab="interactions" aria-selected="true">Interactions</button>
+      <button role="tab" data-tab="flow">Flow</button>
       <button role="tab" data-tab="files">Files</button>
       <button role="tab" data-tab="kb">Knowledge base</button>
     </nav>
@@ -23,7 +24,7 @@
   </header>
   <p class="proto">Prototype: no login. Anyone with this link can read the masked logs and change how the agent behaves.</p>
 
-  <!-- Interactions: live walkthrough against the operating policy -->
+  <!-- Interactions: live walkthrough, traced through the interaction tree -->
   <section id="tab-interactions" class="tab-panel split">
     <aside class="list-pane">
       <div class="pane-head">
@@ -34,21 +35,43 @@
       <p id="int-status" class="hint pad"></p>
     </aside>
     <div class="detail-pane" id="int-detail">
-      <div class="empty-state">Pick a conversation to walk through it step by step.<br>New conversations on the chat site appear here within a few seconds.</div>
+      <div class="empty-state">Pick a conversation to walk through the agent's logic step by step.<br>New conversations on the chat site appear here within a few seconds.</div>
     </div>
   </section>
 
-  <!-- Files: config/ edited in the browser, stored in Supabase with history -->
+  <!-- Flow: the interaction tree (flow.yaml in Supabase) -->
+  <section id="tab-flow" class="tab-panel split" hidden>
+    <aside class="list-pane">
+      <div class="pane-head"><strong>Where in a turn</strong></div>
+      <div id="hook-list" class="list"></div>
+    </aside>
+    <div class="detail-pane flow-pane">
+      <div class="flow-toolbar">
+        <div class="flow-title"><h2 id="hook-title">Interaction tree</h2><p id="hook-desc" class="hint"></p></div>
+        <span id="flow-status" class="hint"></span>
+        <input id="flow-note" class="note" maxlength="500" placeholder="What did you change, and why?">
+        <button id="flow-discard" class="btn" disabled>Discard</button>
+        <button id="flow-save" class="btn primary" disabled>Save tree</button>
+      </div>
+      <div id="flow-errors"></div>
+      <div class="flow-body">
+        <div id="flow-tree" class="tree-wrap"></div>
+        <aside id="node-editor" class="node-editor" hidden></aside>
+      </div>
+    </div>
+  </section>
+
+  <!-- Files: every config file, stored only in Supabase with history -->
   <section id="tab-files" class="tab-panel split" hidden>
     <aside class="list-pane">
       <div class="pane-head">
-        <strong>config/</strong>
+        <strong>Config (Supabase)</strong>
         <button id="new-prompt" class="btn small">New prompt</button>
       </div>
       <div id="file-list" class="list"></div>
     </aside>
     <div class="detail-pane editor-pane" id="file-detail">
-      <div class="empty-state">Pick a file to edit. Saves are checked before they go live, kept in a history, and can be reverted to the repo version.</div>
+      <div class="empty-state">Pick a file to edit. These live only in Supabase: saves are checked before they go live, and every version is kept in the history.</div>
     </div>
   </section>
 

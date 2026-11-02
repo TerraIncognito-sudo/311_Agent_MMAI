@@ -26,10 +26,10 @@ git pull
 docker compose up -d --build
 ```
 
-`config/` is mounted into the container, so for policy or prompt changes
-alone, `git pull` then `docker compose restart` is enough. Knowledge-base
-changes need nothing: edit `kb_documents` in Supabase and the running site
-picks them up within `retrieval.sync_interval_s` (60 s).
+Policy, prompts, guardrails, the interaction tree and the knowledge base
+all live in Supabase, so changing them needs nothing on the server: edit
+them in `/admin` and the running site uses them for the next message. Only
+code changes need `git pull` and a rebuild.
 
 | Task | Command |
 |---|---|

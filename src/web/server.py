@@ -11,12 +11,12 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import Depends, FastAPI, Header, HTTPException
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from src.agent.orchestrator import SetupError, handle_turn
-from src.config import app_config
+from src.config import ConfigUnavailable, app_config, files
 from src.models.llm import LLMSelection, list_models
 from src.rag.ingest import start_sync
 from src.tools.store import MemoryStore, get_store
@@ -63,9 +63,20 @@ def site_config():
             "default_provider": cfg["llm"]["default_provider"], "default_models": cfg["llm"]["default_models"]}
 
 
+@app.exception_handler(ConfigUnavailable)
+def config_unavailable(_request, exc):
+    # The configuration lives only in Supabase; without it the agent can't run.
+    return JSONResponse(status_code=503, content={"detail": str(exc)})
+
+
 @app.get("/api/health")
 def health():
-    return {"ok": True, "store": "memory" if isinstance(get_store(), MemoryStore) else "supabase"}
+    try:
+        config_ok = bool(files())
+    except ConfigUnavailable:
+        config_ok = False
+    return {"ok": config_ok, "store": "memory" if isinstance(get_store(), MemoryStore) else "supabase",
+            "config": "loaded" if config_ok else "unavailable"}
 
 
 @app.get("/api/models")

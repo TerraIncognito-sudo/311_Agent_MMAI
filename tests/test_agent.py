@@ -1,4 +1,4 @@
-"""W4 orchestrator + rules layer, with a scripted model (no LLM needed)."""
+"""W4 orchestrator + interaction tree, with a scripted model (no LLM needed)."""
 from conftest import tool_call
 from src.agent.orchestrator import handle_turn
 

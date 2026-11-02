@@ -21,6 +21,7 @@ class ScreenResult:
     text: str                      # redacted text, safe to pass on
     flags: list[str] = field(default_factory=list)
     redacted: list[str] = field(default_factory=list)
+    matches: dict[str, str] = field(default_factory=dict)   # flag -> the pattern that matched
 
     def has(self, flag: str) -> bool:
         return flag in self.flags
@@ -34,5 +35,9 @@ def _patterns() -> dict[str, list[re.Pattern]]:
 
 def screen(text: str) -> ScreenResult:
     clean, redacted = redact(text)
-    flags = [name for name, pats in _patterns().items() if any(p.search(clean) for p in pats)]
-    return ScreenResult(text=clean, flags=flags, redacted=redacted)
+    matches = {}
+    for name, pats in _patterns().items():
+        hit = next((p.pattern for p in pats if p.search(clean)), None)
+        if hit:
+            matches[name] = hit
+    return ScreenResult(text=clean, flags=list(matches), redacted=redacted, matches=matches)

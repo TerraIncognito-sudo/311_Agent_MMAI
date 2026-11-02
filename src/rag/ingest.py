@@ -6,7 +6,7 @@ picks the change up on its own (start_sync), with no redeploy.
 
 1. (Re)chunks every active document whose content changed since it was last
    chunked, and every new one (the `kb_documents_stale` view).
-2. Embeds the chunks if config/app.yaml retrieval.embedding_provider is set.
+2. Embeds the chunks if app.yaml retrieval.embedding_provider is set.
 3. Optional bulk upload: `--import DIR` upserts every DIR/**/*.md|.txt file
    into kb_documents first (keyed by path relative to DIR).
 
@@ -21,7 +21,7 @@ import hashlib
 import threading
 from pathlib import Path
 
-from src.config import app_config, refresh_overrides
+from src.config import app_config, refresh
 from src.rag.embeddings import embed
 from src.tools.store import get_store
 
@@ -95,7 +95,7 @@ def _chunk_stale(store) -> int:
 
 def start_sync(interval_s: float, store=None) -> threading.Event | None:
     """Every `interval_s` seconds, in a background thread: re-chunk KB edits
-    and pick up config/ edits made in the Supabase dashboard. Returns an
+    and pick up config edits made in the Supabase dashboard. Returns an
     Event that stops the loop, or None if disabled."""
     if interval_s <= 0:
         return None
@@ -107,7 +107,7 @@ def start_sync(interval_s: float, store=None) -> threading.Event | None:
                 n = chunk_stale(store or get_store())
                 if n:
                     print(f"[sync] re-chunked {n} document(s)")
-                if refresh_overrides():
+                if refresh():
                     print("[sync] applied config edits from Supabase")
             except Exception as e:   # Supabase or the embedding model is down; try again next round
                 print(f"[sync] failed: {type(e).__name__}: {e}")

@@ -8,7 +8,8 @@ Supabase. They are marked **proposed** until D's Nov 5 interface session.
 | Interface | Drafted by | Lives in | Used by |
 |---|---|---|---|
 | Interaction record | A | `data/*.jsonl` | W3, W4, W6 |
-| Policy file | B | `config/policy.yaml` | W4, W1 tests |
+| Policy file | B | `policy.yaml` (Supabase `config_files`) | W4, W1 tests |
+| Interaction tree (proposed) | B/D | `flow.yaml` (Supabase `config_files`); engine `src/agent/flow.py` | W4, W1 tests |
 | Tool functions | D | `src/tools/` | W4, W1, W5 |
 | Classifier | C | `src/models/classifier.py` | W4, W6 |
 | Event log | D | Supabase `interaction_events` | W6, W7 |
@@ -26,7 +27,7 @@ JSONL, one object per line:
 
 ## Policy file (B)
 
-`config/policy.yaml`. Per code under `service_catalogue`: `unit`,
+`policy.yaml` in Supabase `config_files`. Per code under `service_catalogue`: `unit`,
 `required_fields`, `escalation_triggers`, `duplicate_window` (plus
 `category`, optional `field_options`). Global rules by ID under `rules`
 (`hard: true` = enforced in code). Also `thresholds` (E3 confidence 0.70,
@@ -66,7 +67,10 @@ Supabase table `interaction_events`:
 `event_id, interaction_id, step, model, tokens_in, tokens_out, cost_usd, latency_ms, rule_id, outcome, text (masked)` (+ `created_at`)
 
 `step` values written today: `input_screen`, `model`, `tool:<name>`,
-`output_check`, `rule`, `reply` (the text the resident was shown).
+`flow` (one per tree node visited), `reply` (the text the resident was
+shown). For `flow` the text is JSON `{hook, node, title, rule, check |
+action, observed, branch, next, fired, says?}`; `rule_id` is set only when
+the node fired (a decision's yes branch, or an action).
 For `tool:<name>` the text is JSON `{args, error, result}`; for
 `tool:handoff` it is `{reason, result}`. `model` is `provider:model_id`. `cost_usd` is
 OpenRouter's reported cost, 0 for Ollama.
@@ -103,7 +107,7 @@ then E9) from setup problems (bad key, unknown model; shown to the user).
 | GET | `/api/config` | | site text, providers, default models |
 | GET | `/api/models` | `?provider=ollama\|openrouter` | models with tool support |
 | POST | `/api/chat` | `{interaction_id?, message, provider, model}` + header `X-OpenRouter-Key` (OpenRouter only) | `{interaction_id, reply, rule_id}` |
-| GET | `/api/health` | | `{ok, store: supabase\|memory}` |
+| GET | `/api/health` | | `{ok, store: supabase\|memory, config: loaded\|unavailable}` |
 
 ## Admin API and config edits (proposed)
 
@@ -115,16 +119,26 @@ both off). Everything returned about conversations is masked (D6).
 | GET | `/api/admin/interactions` | `?limit=` | rows of the `interaction_summaries` view, newest first |
 | GET | `/api/admin/interactions/{id}` | | `{events (with parsed data), handoffs, tickets}` |
 | GET | `/api/admin/rules` | | policy rule text by ID, catalogue codes |
-| GET | `/api/admin/files` | | editable files, whether each is edited in the browser |
-| GET / PUT / DELETE | `/api/admin/file` | `?path=`; PUT `{content, author?, note?}` | read, save (checked first, 422 with `errors`), revert to repo |
+| GET / PUT | `/api/admin/flow` | PUT `{doc, author?, note?}` | the tree, validation errors, checks/actions/hooks vocabulary; save (422 with `errors`) |
+| GET | `/api/admin/files` | | every config file, whether the agent uses it, who saved it last |
+| GET / PUT / DELETE | `/api/admin/file` | `?path=`; PUT `{content, author?, note?}` | read, save (checked first, 422 with `errors`), delete (not if in use) |
 | GET | `/api/admin/revisions` | `?path=` | save history for a file |
 | GET / POST | `/api/admin/kb` | POST `{title, content, source?, active?}` | documents; create |
 | PUT / DELETE | `/api/admin/kb/{id}` | PUT as POST | update; delete |
 
-Config edits: `config_files(path, content, updated_at, updated_by)` holds
-the browser version of a `config/` file and wins over the repo file until
-reverted; `config_revisions(id, path, content, note, author, saved_at)` keeps
-every save (`content` null = reverted). Editable: `app.yaml`, `policy.yaml`,
-`guardrails.yaml`, `prompts/<folder>/<name>.md|.txt`. A save is refused if
-the YAML doesn't parse, a key the code reads (present in the repo version)
-is missing, a regex doesn't compile, or the system prompt doesn't render.
+Config: `config_files(path, content, updated_at, updated_by)` is the only
+copy of every config file; `config_revisions(id, path, content, note,
+author, saved_at)` keeps every save (`content` null = deleted). Files:
+`app.yaml`, `policy.yaml`, `guardrails.yaml`, `flow.yaml`,
+`prompts/<folder>/<name>.md|.txt`. A save is refused if the YAML doesn't
+parse, a key the code reads is missing (`REQUIRED` in `src/web/admin.py`),
+a regex doesn't compile, the tree is invalid or drops a [hard] rule, or the
+system prompt doesn't render.
+
+## Interaction tree (proposed)
+
+`flow.yaml`: `hooks: {<hook>: <start node>}` and `nodes: {<id>: node}`. A
+node has `title`, optional `description`, `rule`, `enabled`, and either
+`check` + `params` + `yes`/`no`, or `action` + `params` + `next`. Hooks,
+checks and actions are listed by `GET /api/admin/flow` and documented in
+`src/agent/flow.py` and docs/architecture.md.

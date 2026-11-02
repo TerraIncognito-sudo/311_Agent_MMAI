@@ -10,7 +10,7 @@ alternatives, and why. The report draws on this file directly.
 * **Why:** collaborators can inspect and edit tickets and knowledge-base documents in the Supabase dashboard without running the server; pgvector gives vector search in the same database. An in-memory store with the same methods keeps tests and CI key-free.
 * **Affects:** W2 seeds tickets into Supabase (`supabase/seed.sql` is a 5-row placeholder) instead of SQLite; W4 tools read and write through `src/tools/store.py` only.
 
-## D-002 Policy store stays in `config/policy.yaml` (2026-11-02)
+## D-002 Policy store stays in `config/policy.yaml` (2026-11-02, superseded by D-012)
 
 * **Chose:** the service catalogue and rule IDs stay in YAML in the repo, read by `policy_lookup`.
 * **Alternatives:** a `policy` table in Supabase next to the knowledge base.
@@ -42,7 +42,7 @@ alternatives, and why. The report draws on this file directly.
 
 * **Chose:** run the site as a Docker container (`Dockerfile`, `docker-compose.yml`), built on the server from the repo with `docker compose up -d --build`.
 * **Alternatives:** a native Python process started by a Windows scheduled task (used briefly on 2026-11-02, then removed).
-* **Why:** matches how the other services on that server run, one command to update, and the same image runs on any teammate's machine. Ollama stays on the host and is reached via `host.docker.internal`; `config/` is mounted so policy and prompt edits don't need a rebuild.
+* **Why:** matches how the other services on that server run, one command to update, and the same image runs on any teammate's machine. Ollama stays on the host and is reached via `host.docker.internal`. (Config was mounted from `config/` until D-012 moved it to Supabase.)
 
 ## D-008 Supabase security hardening (2026-11-02)
 
@@ -55,7 +55,7 @@ alternatives, and why. The report draws on this file directly.
 * **Alternatives:** Markdown files in the repo loaded by `python run.py ingest` (the first version); chunking inside Postgres with a trigger.
 * **Why:** the RAG team can change what the agent knows from the dashboard without touching the repo or the server, and the deployed site only changes for structural changes. Chunking stays in Python so it can also call the embedding model, which a Postgres trigger can't.
 
-## D-010 Admin page; config edits stored in Supabase (2026-11-02)
+## D-010 Admin page; config edits stored in Supabase (2026-11-02, config part superseded by D-012)
 
 * **Chose:** an `/admin` page with a live, step-by-step walkthrough of each conversation from `interaction_events`, and browser editing of `config/` files and the knowledge base. A saved config file goes to Supabase `config_files` and overrides the repo file until reverted; every save is kept in `config_revisions`.
 * **Alternatives:** writing edits to the server's checkout (a dirty checkout breaks `git pull`, and edits would vanish on the next clone); editing only through pull requests (D-002).
@@ -66,3 +66,17 @@ alternatives, and why. The report draws on this file directly.
 
 * **Chose:** `payment_card` in `config/guardrails.yaml` no longer matches `311-YYYY-NNNNNN`.
 * **Why:** ticket numbers have 13 digits, so the card pattern redacted them: in the logs, and in a resident's own status request before the model saw it, which broke A5 status lookups. Found by the admin walkthrough test (`tests/test_guardrails.py::test_d2_keeps_ticket_numbers`).
+
+## D-012 All configuration lives only in Supabase (2026-11-02)
+
+* **Chose:** `app.yaml`, `policy.yaml`, `guardrails.yaml`, `flow.yaml` and the prompts are rows in Supabase `config_files` and nowhere else; `config/` was removed from the repo. The site loads them from Supabase only. The tests use a fixture (`tests/fixtures/config/`) the site never reads; `python run.py config pull|push` copies between the two.
+* **Alternatives:** repo files as defaults with Supabase overrides (D-010, the first version of `/admin`), which left two copies that could disagree.
+* **Why:** one copy can't go stale, and what the team sees in `/admin` is exactly what the agent runs. Supersedes D-002 and the work plan's "prompts and policy live in config/" convention; review now happens through the save notes and `config_revisions` instead of pull requests.
+* **Risk:** the site can't start a conversation without Supabase (it answers 503); once loaded, the config stays in memory through outages.
+
+## D-013 The policy's decision logic is an editable tree (2026-11-02)
+
+* **Chose:** `flow.yaml` holds the decision logic (input screen outcomes, gates before tools, guidance after tools, failure handling, reply checks) as trees of yes/no checks and actions that the agent runs at fixed hooks; `src/agent/flow.py` provides the checks and actions. Every node visited is logged, and `/admin` shows a conversation's path through the tree.
+* **Alternatives:** keep the rules in code (`src/agent/rules.py`, the first version) and only document the flow.
+* **Why:** policy owners can change the logic and see exactly why the agent did what it did, decision by decision, without code. Saves that would drop a [hard] rule (E1, A2, A8, D5, E6, E9, M3) are refused; D2 redaction and D6 masking stay in code.
+* **Behaviour added by the default tree:** E3 (ask one clarifying question when the classifier is unsure; the repeat-handoff step is switched off until the real classifier and threshold land), C6 duplicate guidance, M2 ask-one-field guidance, and M3 confirmation guidance.
