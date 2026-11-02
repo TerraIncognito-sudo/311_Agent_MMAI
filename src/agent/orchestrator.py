@@ -186,7 +186,7 @@ def handle_turn(interaction_id: str | None, user_text: str, sel: LLMSelection) -
         calls = msg.get("tool_calls") or []
         if not calls:
             reply = (msg.get("content") or "").strip()
-            check = output_check.check(reply, st.known_ids)
+            check = output_check.check(reply, st.known_ids, ticket_created=bool(st.ticket_ids))
             if not check.ok:                                  # M3 [hard]
                 log_event(session, "output_check", rule_id="M3", outcome="blocked", text=reply)
                 return _finish(session, _do_handoff(session, "E9", "reply quoted an ID no tool returned"), "M3")

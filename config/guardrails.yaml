@@ -62,4 +62,6 @@ output_check:
     - '\b(will be|you will be|they will be) fined\b'
   # M3 [hard]: any ticket ID in a reply must have been returned by a tool
   ticket_id: '\b311-\d{4}-\d{6}\b'
+  # M3 [hard]: claiming a request was created when create_ticket returned no ID
+  ticket_claim: '\b(created|filed|submitted|opened|logged)\b[^.]{0,30}\b(request|ticket|report)\b|\b(request|ticket)\b[^.]{0,30}\b(has been|was) (created|filed|submitted)\b'
   handoff_ref: '\bHO-\d{4}-\d{6}\b'

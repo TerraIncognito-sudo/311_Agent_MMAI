@@ -42,3 +42,10 @@ def test_m3_blocks_invented_ticket_id():
 def test_c1_flags_commitment():
     result = output_check.check("A crew will fix it within 3 days.", set())
     assert result.ok and result.flags == ["commitment"]
+
+
+def test_m3_blocks_claimed_ticket_without_create():
+    reply = 'I\'ve created request "RD-POT" for pothole or road damage at 45 Elm Street.'
+    assert not output_check.check(reply, set(), ticket_created=False).ok
+    assert output_check.check(reply, set(), ticket_created=True).ok
+    assert output_check.check("Which lane is the pothole in?", set(), ticket_created=False).ok
