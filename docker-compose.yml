@@ -1,0 +1,32 @@
+# Gilead 311 site. On the server:
+#   git pull
+#   docker compose up -d --build
+# Secrets come from .env (copy .env.example). See docs/deployment.md.
+name: gilead-311
+
+services:
+  app:
+    build: .
+    image: gilead-311:latest
+    container_name: gilead-311
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      # These override .env for the container.
+      HOST: 0.0.0.0
+      PORT: "8311"
+      # Ollama runs on the host machine, not in this container.
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL_DOCKER:-http://host.docker.internal:11434}
+      # Requests arrive from Docker's network, so trust forwarded headers from it.
+      FORWARDED_ALLOW_IPS: "*"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"   # needed on Linux hosts; harmless on Docker Desktop
+    ports:
+      # 127.0.0.1 = reachable only from this machine (cloudflared runs here).
+      # Set PUBLISH_ADDRESS=0.0.0.0 in .env to also reach it from the LAN.
+      - "${PUBLISH_ADDRESS:-127.0.0.1}:8311:8311"
+    volumes:
+      # Config and knowledge base are mounted so policy/prompt/KB edits apply
+      # after `git pull` + `docker compose restart`, without a rebuild.
+      - ./config:/app/config:ro
+      - ./data/kb:/app/data/kb:ro

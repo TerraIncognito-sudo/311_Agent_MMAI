@@ -30,14 +30,24 @@ python run.py serve           # http://127.0.0.1:8311
 No Supabase yet? Set `USE_MEMORY_STORE=1` in `.env` to run with an in-memory
 store (nothing persists across restarts).
 
+With Docker instead (how the team server runs it):
+
+```bash
+cp .env.example .env          # fill in the Supabase values
+docker compose up -d --build  # http://127.0.0.1:8311
+```
+
+See [docs/deployment.md](docs/deployment.md) for updates, logs and the Cloudflare tunnel.
+
 ## Supabase setup (once per project)
 
 1. Create a project at supabase.com.
-2. SQL editor: run `supabase/migrations/0001_init.sql`, then `supabase/seed.sql`.
+2. SQL editor: run the files in `supabase/migrations/` in order, then `supabase/seed.sql`.
 3. Project Settings > API: copy the project URL and the **service_role /
    secret** key into `.env` (`SUPABASE_URL`, `SUPABASE_SERVICE_KEY`).
    The secret key stays on the server; RLS blocks the public anon key.
-4. Load the knowledge base: `python run.py ingest`.
+4. Load the knowledge base: `python run.py ingest`
+   (in Docker: `docker compose run --rm app python run.py ingest`).
 
 Tables: `tickets`, `handoffs`, `interaction_events` (event log),
 `kb_documents`, `kb_chunks`. Collaborators can browse and edit them in the
@@ -92,6 +102,7 @@ docs/              interfaces, architecture, decisions, prompt changelog, deploy
 | `python run.py serve` | `make serve` | Start the chat site |
 | `python run.py ingest` | `make ingest` | Load `data/kb/` into Supabase and re-chunk changes |
 | `python run.py test` | `make test` | Run the tests (in-memory store, scripted model) |
+| `docker compose up -d --build` | | Build and start the site in Docker |
 
 ## Team docs
 

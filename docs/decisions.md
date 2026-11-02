@@ -31,3 +31,12 @@ alternatives, and why. The report draws on this file directly.
 ## D-006 kb_search added as a tool (proposed, 2026-11-02)
 - **Chose:** a seventh tool, `kb_search`, alongside the policy's six actions.
 - **Why:** C5 allows facts about City services only when a tool returned them; retrieval needs to be a tool for that to hold. Needs B's and D's sign-off at the Nov 5 interface session (A9 lists permitted actions).
+
+## D-007 Docker on the team server (2026-11-02)
+- **Chose:** run the site as a Docker container (`Dockerfile`, `docker-compose.yml`), built on the server from the repo with `docker compose up -d --build`.
+- **Alternatives:** a native Python process started by a Windows scheduled task (used briefly on 2026-11-02, then removed).
+- **Why:** matches how the other services on that server run, one command to update, and the same image runs on any teammate's machine. Ollama stays on the host and is reached via `host.docker.internal`; `config/` and `data/kb/` are mounted so policy and knowledge-base edits don't need a rebuild.
+
+## D-008 Supabase security hardening (2026-11-02)
+- **Chose:** `supabase/migrations/0002_security_hardening.sql`: pgvector moved to the `extensions` schema, `kb_documents_stale` made `security_invoker`, fixed `search_path` on functions, `match_kb_chunks` executable by `service_role` only.
+- **Why:** fixes every Supabase security-advisor finding except "RLS enabled, no policy", which is intended: only the server's secret key and the dashboard may access the tables.

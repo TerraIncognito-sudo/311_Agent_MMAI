@@ -15,7 +15,8 @@ def serve(args):
 
     from src.config import env
     uvicorn.run("src.web.server:app", host=env("HOST", "127.0.0.1"), port=int(env("PORT", "8311")),
-                reload="--reload" in args, proxy_headers=True, forwarded_allow_ips="127.0.0.1")
+                reload="--reload" in args, proxy_headers=True,
+                forwarded_allow_ips=env("FORWARDED_ALLOW_IPS", "127.0.0.1"))
 
 
 def ingest(args):
