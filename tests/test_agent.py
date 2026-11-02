@@ -65,3 +65,16 @@ def test_conversation_continues_with_same_interaction(llm, sel):
     first = handle_turn(None, "my bin is broken", sel)
     second = handle_turn(first["interaction_id"], "recycling", sel)
     assert first["interaction_id"] == second["interaction_id"]
+
+
+def test_m3_resident_can_have_their_own_ticket_number_repeated(llm, sel, fresh_store):
+    # Repeating the number the resident typed is not inventing one (status check, A5).
+    llm("Could you give me the postal code on ticket 311-2026-000001?")
+    out = handle_turn(None, "what is the status of ticket 311-2026-000001", sel)
+    assert out["rule_id"] is None and "311-2026-000001" in out["reply"] and not fresh_store.handoffs
+
+
+def test_m3_still_blocks_ids_nobody_gave(llm, sel, fresh_store):
+    llm("Ticket 311-2026-000777 is open.")
+    out = handle_turn(None, "what is the status of ticket 311-2026-000001", sel)
+    assert out["rule_id"] == "M3" and fresh_store.handoffs

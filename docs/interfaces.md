@@ -123,6 +123,12 @@ both off). Everything returned about conversations is masked (D6).
 | GET | `/api/admin/files` | | every config file, whether the agent uses it, who saved it last |
 | GET / PUT / DELETE | `/api/admin/file` | `?path=`; PUT `{content, author?, note?}` | read, save (checked first, 422 with `errors`), delete (not if in use) |
 | GET | `/api/admin/revisions` | `?path=` | save history for a file |
+| GET | `/api/admin/tickets` | `?status=&code=&q=&limit=` | tickets (masked, no contact), counts by status |
+| GET | `/api/admin/tickets/{ticket_id}` | | ticket, its required fields, status history |
+| POST | `/api/admin/tickets/{ticket_id}/updates` | `{status?, note?, author?}` | change status (`open`, `in_progress`, `closed`) and/or add a note |
+| GET | `/api/admin/handoffs` | `?status=&rule_id=&q=&limit=` | handoffs (masked), counts by status |
+| GET | `/api/admin/handoffs/{ref_id}` | | handoff with transcript, status history |
+| POST | `/api/admin/handoffs/{ref_id}/updates` | `{status?, note?, author?}` | change status (`pending`, `in_review`, `resolved`) and/or add a note |
 | GET / POST | `/api/admin/kb` | POST `{title, content, source?, active?}` | documents; create |
 | PUT / DELETE | `/api/admin/kb/{id}` | PUT as POST | update; delete |
 
@@ -142,3 +148,12 @@ node has `title`, optional `description`, `rule`, `enabled`, and either
 `check` + `params` + `yes`/`no`, or `action` + `params` + `next`. Hooks,
 checks and actions are listed by `GET /api/admin/flow` and documented in
 `src/agent/flow.py` and docs/architecture.md.
+
+## Ticket and handoff tracking (proposed)
+
+- `tickets.interaction_id`: the conversation that created the ticket. The
+  orchestrator passes it to `create_ticket(code, fields, interaction_id)`;
+  the model never sets it.
+- `record_updates(id, kind ticket|handoff, ref, old_status, new_status, note,
+  author, created_at)`: every status change or note made by staff in
+  `/admin`. The agent never writes here (A7).

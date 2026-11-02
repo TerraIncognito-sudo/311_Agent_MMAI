@@ -17,6 +17,7 @@ class RuleState:
     looked_up: set[str] = field(default_factory=set)        # A2
     ticket_ids: set[str] = field(default_factory=set)       # A8, M3
     known_ids: set[str] = field(default_factory=set)        # M3: every ID a tool returned
+    mentioned_ids: set[str] = field(default_factory=set)    # M3: IDs the resident typed (may be quoted back)
     field_attempts: dict[str, int] = field(default_factory=dict)  # E6
     unsure_count: int = 0                                   # E3
     handed_off: bool = False

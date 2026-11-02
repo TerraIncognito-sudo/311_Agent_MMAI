@@ -39,8 +39,10 @@ def search_tickets(location: str, code: str | None = None, days: int | None = No
     return {"ok": True, "error": None, "tickets": tickets}
 
 
-def create_ticket(code: str, fields: dict) -> dict:
-    """A4 [hard]: refuses unless the code exists and every required field is present."""
+def create_ticket(code: str, fields: dict, interaction_id: str | None = None) -> dict:
+    """A4 [hard]: refuses unless the code exists and every required field is present.
+    interaction_id is filled in by the orchestrator (not the model) so /admin can
+    link the ticket to its conversation."""
     pol = policy_lookup(code)
     if not pol["ok"]:
         return pol
@@ -57,6 +59,7 @@ def create_ticket(code: str, fields: dict) -> dict:
         "postal_code": fields.pop("postal_code", None) or _postal_code(location),
         "fields": fields,
         "contact": contact or None,
+        "interaction_id": interaction_id,
     }
     try:
         saved = get_store().create_ticket(row)

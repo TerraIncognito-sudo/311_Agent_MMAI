@@ -7,11 +7,14 @@ logged or echoed back.
 """
 from __future__ import annotations
 
+import hashlib
+import re
 from contextlib import asynccontextmanager
+from functools import lru_cache
 from pathlib import Path
 
 from fastapi import Depends, FastAPI, Header, HTTPException
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
@@ -46,14 +49,31 @@ class ChatRequest(BaseModel):
     model: str
 
 
+@lru_cache
+def _page(name: str) -> str:
+    """The HTML page with every /static/ link stamped with that file's content
+    hash. Cloudflare caches .js and .css for hours; a new hash after a deploy
+    means browsers and the edge fetch the new file instead of a stale one."""
+    def stamp(m):
+        path = STATIC / m.group(1)
+        digest = hashlib.sha256(path.read_bytes()).hexdigest()[:10] if path.is_file() else "0"
+        return f'"/static/{m.group(1)}?v={digest}"'
+    return re.sub(r'"/static/([\w.-]+)"', stamp, (STATIC / name).read_text(encoding="utf-8"))
+
+
+def _html(name: str) -> HTMLResponse:
+    # The page itself is never cached, so it always points at the current files.
+    return HTMLResponse(_page(name), headers={"Cache-Control": "no-cache"})
+
+
 @app.get("/")
 def index():
-    return FileResponse(STATIC / "index.html")
+    return _html("index.html")
 
 
 @app.get("/admin", dependencies=[Depends(admin._enabled)])
 def admin_page():
-    return FileResponse(STATIC / "admin.html")
+    return _html("admin.html")
 
 
 @app.get("/api/config")

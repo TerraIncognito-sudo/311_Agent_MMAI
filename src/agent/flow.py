@@ -153,8 +153,10 @@ def _reply_has_rule_ids(ctx):
 
 
 def _reply_invented_id(ctx):
-    ids = output_check.invented_ids(ctx.reply or "", ctx.state.known_ids)
-    return bool(ids), f"not returned by any tool: {', '.join(ids)}" if ids else "every ID came from a tool"
+    ids = output_check.invented_ids(ctx.reply or "", ctx.state.known_ids | ctx.state.mentioned_ids)
+    if ids:
+        return True, f"not returned by any tool or given by the resident: {', '.join(ids)}"
+    return False, "every ID came from a tool or the resident"
 
 
 def _reply_claims_ticket(ctx):

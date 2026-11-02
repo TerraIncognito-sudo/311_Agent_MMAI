@@ -92,6 +92,11 @@ returned them (policy rule C5).
   Model and tool calls show their arguments and results; tickets and
   handoffs come from the database. Tick *Follow newest* and chat on the
   main site to watch a conversation live.
+- **Tickets / Handoffs:** every ticket and handoff, live. Filter by status,
+  code or rule, or search; open one to see what was collected, why it was
+  handed off, the transcript, and the conversation behind it. Change its
+  status (tickets: open, in progress, closed; handoffs: pending, in review,
+  resolved) or add a note; every change is kept with who made it.
 - **Flow:** the interaction tree, one tree per point in a turn. Click a
   step to edit its question, check, branches, wording or rule, switch it
   off, or add steps. Saves are checked (no missing nodes or loops, every

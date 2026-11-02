@@ -23,6 +23,7 @@ from dataclasses import dataclass, field
 from src.agent import flow
 from src.agent.rules import RuleState, record
 from src.config import app_config, load_prompt, policy
+from src.guardrails import output_check
 from src.guardrails.input_screen import screen
 from src.guardrails.masking import mask
 from src.models.llm import LLMError, LLMSelection, chat
@@ -174,7 +175,8 @@ def _run_tool(session: Session, name: str, args: dict) -> tuple[dict, flow.Outco
     for attempt in range(retries + 1):
         start = time.perf_counter()
         try:
-            result = TOOLS[name](**args)
+            call_args = {**args, "interaction_id": session.interaction_id} if name == "create_ticket" else args
+            result = TOOLS[name](**call_args)
         except TypeError as e:   # model passed wrong arguments
             result = {"ok": False, "error": f"bad arguments: {e}"}
             break
@@ -205,6 +207,7 @@ def _run_tool(session: Session, name: str, args: dict) -> tuple[dict, flow.Outco
 def handle_turn(interaction_id: str | None, user_text: str, sel: LLMSelection) -> dict:
     session = get_session(interaction_id)
     scr = screen(user_text)
+    session.state.mentioned_ids |= output_check.ids_in(scr.text)   # M3: may be quoted back
     session.transcript.append({"role": "resident", "text": scr.text})
     log_event(session, "input_screen", outcome=",".join(scr.flags + scr.redacted) or "clean", text=scr.text)
 

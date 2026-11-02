@@ -80,3 +80,18 @@ alternatives, and why. The report draws on this file directly.
 * **Alternatives:** keep the rules in code (`src/agent/rules.py`, the first version) and only document the flow.
 * **Why:** policy owners can change the logic and see exactly why the agent did what it did, decision by decision, without code. Saves that would drop a [hard] rule (E1, A2, A8, D5, E6, E9, M3) are refused; D2 redaction and D6 masking stay in code.
 * **Behaviour added by the default tree:** E3 (ask one clarifying question when the classifier is unsure; the repeat-handoff step is switched off until the real classifier and threshold land), C6 duplicate guidance, M2 ask-one-field guidance, and M3 confirmation guidance.
+
+## D-014 Ticket and handoff tracking in /admin (2026-11-02)
+
+* **Chose:** Tickets and Handoffs tabs with live lists, detail, status changes and notes; every change is kept in `record_updates` with its author. Tickets now record the conversation that created them (`tickets.interaction_id`). Migration `0005_tracking.sql`.
+* **Why:** the team can follow what happens to each request after the agent hands it on, and jump between a record and the conversation behind it. Only staff change status; the agent still can't edit anything (A7). Shown masked (D6) while the page has no login.
+
+## D-015 M3 accepts IDs the resident typed (2026-11-02)
+
+* **Chose:** the reply check treats ticket and handoff IDs that the resident wrote as known, as well as those a tool returned.
+* **Why:** a resident asking about their own ticket was handed off under M3 when the agent repeated the number back while asking for the postal code (A5). M3 is about the agent inventing IDs; IDs nobody gave are still blocked (`tests/test_agent.py`).
+
+## D-016 Versioned static files (2026-11-02)
+
+* **Chose:** pages link `/static/*` with a content hash and are sent `Cache-Control: no-cache`.
+* **Why:** Cloudflare kept serving the previous `admin.js` for hours after a deploy, so the new Flow tab "did nothing" (the old script had no Flow tab).

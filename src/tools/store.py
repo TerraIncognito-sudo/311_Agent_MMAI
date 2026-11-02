@@ -32,6 +32,15 @@ def store_failure(e: StoreError) -> dict:
     return {"ok": False, "error": "service temporarily unavailable", "_failure": True, "_detail": str(e)}
 
 
+# Ticket columns /admin may show. contact (D1) is never returned.
+TICKET_COLUMNS = "ticket_id,code,unit,status,location,postal_code,fields,opened_at,interaction_id"
+
+
+def _search_term(q: str) -> str:
+    """A search term safe inside a PostgREST or=(...) filter."""
+    return re.sub(r"[^\w\s@.-]", " ", q).strip()[:80]
+
+
 def _now() -> datetime:
     return datetime.now(timezone.utc)
 
@@ -146,6 +155,59 @@ class SupabaseStore:
             "select": "id,path,content,note,author,saved_at", "path": f"eq.{path}",
             "order": "saved_at.desc", "limit": str(limit)})
 
+    # --- ticket and handoff tracking for /admin (staff only; the agent can't edit, A7) ---
+    def list_tickets(self, status: str | None, code: str | None, q: str | None, limit: int) -> list[dict]:
+        params = {"select": TICKET_COLUMNS, "order": "opened_at.desc", "limit": str(limit)}
+        if status:
+            params["status"] = f"eq.{status}"
+        if code:
+            params["code"] = f"eq.{code}"
+        if q:
+            term = _search_term(q)
+            params["or"] = f"(ticket_id.ilike.*{term}*,location_norm.ilike.*{term.lower()}*)"
+        return self._req("GET", "tickets", params=params)
+
+    def get_ticket_record(self, ticket_id: str) -> dict | None:
+        rows = self._req("GET", "tickets", params={"select": TICKET_COLUMNS, "ticket_id": f"eq.{ticket_id}"})
+        return rows[0] if rows else None
+
+    def set_ticket_status(self, ticket_id: str, status: str) -> None:
+        self._req("PATCH", "tickets", params={"ticket_id": f"eq.{ticket_id}"}, json={"status": status},
+                  headers={"Prefer": "return=minimal"})
+
+    def list_handoffs(self, status: str | None, rule_id: str | None, q: str | None, limit: int) -> list[dict]:
+        params = {"select": "*", "order": "created_at.desc", "limit": str(limit)}
+        if status:
+            params["status"] = f"eq.{status}"
+        if rule_id:
+            params["rule_id"] = f"eq.{rule_id}"
+        if q:
+            term = _search_term(q)
+            params["or"] = f"(ref_id.ilike.*{term}*,reason.ilike.*{term}*,code.ilike.*{term}*)"
+        return self._req("GET", "handoffs", params=params)
+
+    def get_handoff(self, ref_id: str) -> dict | None:
+        rows = self._req("GET", "handoffs", params={"select": "*", "ref_id": f"eq.{ref_id}"})
+        return rows[0] if rows else None
+
+    def set_handoff_status(self, ref_id: str, status: str) -> None:
+        self._req("PATCH", "handoffs", params={"ref_id": f"eq.{ref_id}"}, json={"status": status},
+                  headers={"Prefer": "return=minimal"})
+
+    def status_counts(self, table: str) -> dict[str, int]:
+        rows = self._req("GET", table, params={"select": "status", "limit": "10000"})
+        counts: dict[str, int] = {}
+        for r in rows:
+            counts[r["status"]] = counts.get(r["status"], 0) + 1
+        return counts
+
+    def add_update(self, row: dict) -> None:
+        self._req("POST", "record_updates", json=row, headers={"Prefer": "return=minimal"})
+
+    def record_updates(self, kind: str, ref: str) -> list[dict]:
+        return self._req("GET", "record_updates", params={
+            "select": "*", "kind": f"eq.{kind}", "ref": f"eq.{ref}", "order": "created_at.asc"})
+
     # --- interaction walkthrough for /admin ---
     def list_interactions(self, limit: int = 50) -> list[dict]:
         return self._req("GET", "interaction_summaries", params={
@@ -179,6 +241,7 @@ class MemoryStore:
         self.configs: dict[str, dict] = {p: {"content": c, "updated_at": _now().isoformat(), "updated_by": "fixture"}
                                           for p, c in (config or {}).items()}
         self.revisions: list[dict] = []
+        self.updates: list[dict] = []
         self._ticket_seq = itertools.count(1)
         self._handoff_seq = itertools.count(1)
         self.fail: set[str] = set()   # method names that should raise (failure tests)
@@ -287,6 +350,45 @@ class MemoryStore:
 
     def config_revisions(self, path: str, limit: int = 50) -> list[dict]:
         return [r for r in reversed(self.revisions) if r["path"] == path][:limit]
+
+    def list_tickets(self, status, code, q, limit):
+        out = [t for t in reversed(self.tickets) if (not status or t["status"] == status)
+               and (not code or t["code"] == code)
+               and (not q or q.lower() in t["ticket_id"].lower() or q.lower() in t["location_norm"])]
+        return [{k: t.get(k) for k in TICKET_COLUMNS.split(",")} for t in out[:limit]]
+
+    def get_ticket_record(self, ticket_id):
+        t = next((t for t in self.tickets if t["ticket_id"] == ticket_id), None)
+        return {k: t.get(k) for k in TICKET_COLUMNS.split(",")} if t else None
+
+    def set_ticket_status(self, ticket_id, status):
+        next(t for t in self.tickets if t["ticket_id"] == ticket_id)["status"] = status
+
+    def list_handoffs(self, status, rule_id, q, limit):
+        out = [h for h in reversed(self.handoffs) if (not status or h.get("status", "pending") == status)
+               and (not rule_id or h["rule_id"] == rule_id)
+               and (not q or q.lower() in f"{h['ref_id']} {h.get('reason') or ''} {h.get('code') or ''}".lower())]
+        return [{"status": "pending", **h} for h in out[:limit]]
+
+    def get_handoff(self, ref_id):
+        h = next((h for h in self.handoffs if h["ref_id"] == ref_id), None)
+        return {"status": "pending", **h} if h else None
+
+    def set_handoff_status(self, ref_id, status):
+        next(h for h in self.handoffs if h["ref_id"] == ref_id)["status"] = status
+
+    def status_counts(self, table):
+        rows = self.tickets if table == "tickets" else [{"status": "pending", **h} for h in self.handoffs]
+        counts: dict[str, int] = {}
+        for r in rows:
+            counts[r["status"]] = counts.get(r["status"], 0) + 1
+        return counts
+
+    def add_update(self, row):
+        self.updates.append({"id": len(self.updates) + 1, "created_at": _now().isoformat(), **row})
+
+    def record_updates(self, kind, ref):
+        return [u for u in self.updates if u["kind"] == kind and u["ref"] == ref]
 
     def list_interactions(self, limit: int = 50) -> list[dict]:
         by_id: dict[str, list[dict]] = {}

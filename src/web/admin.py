@@ -10,6 +10,8 @@ Set ADMIN_ENABLED=0 in .env to switch the page and this API off.
   renders), then stored with its history and applied without a redeploy.
 - Flow: the interaction tree (flow.yaml) as structured data for the tree
   editor, plus the checks and actions the code offers.
+- Tickets and handoffs: live lists, detail, status changes and notes
+  (kept in record_updates), each linked to the conversation behind it.
 - Knowledge base: edit kb_documents; changed documents are re-chunked at once.
 """
 from __future__ import annotations
@@ -273,6 +275,89 @@ def save_flow(body: FlowSave):
     if len(text) > MAX_FILE_CHARS:
         raise HTTPException(422, {"errors": ["the tree is too large"]})
     _save("flow.yaml", text, body.author, body.note)
+    return {"ok": True}
+
+
+# ---------------------------------------------------------------- tickets and handoffs
+# Staff tracking. The agent can't change either (A7); every change made here is
+# kept in record_updates with who made it and why. Returned data is masked (D6)
+# because this page has no login yet.
+
+TICKET_STATUSES = ["open", "in_progress", "closed"]
+HANDOFF_STATUSES = ["pending", "in_review", "resolved"]
+
+
+class StatusUpdate(BaseModel):
+    status: str | None = None
+    note: str | None = Field(default=None, max_length=1000)
+    author: str | None = Field(default=None, max_length=80)
+
+
+@router.get("/tickets")
+def tickets(status: str | None = None, code: str | None = None, q: str | None = None, limit: int = 100):
+    store = get_store()
+    rows = _store_call(store.list_tickets, status, code, q, min(limit, 500))
+    return {"tickets": mask_obj(rows), "counts": _store_call(store.status_counts, "tickets"),
+            "statuses": TICKET_STATUSES, "codes": sorted(policy()["service_catalogue"])}
+
+
+@router.get("/tickets/{ticket_id}")
+def ticket(ticket_id: str):
+    store = get_store()
+    t = _store_call(store.get_ticket_record, ticket_id)
+    if t is None:
+        raise HTTPException(404, "ticket not found")
+    entry = policy()["service_catalogue"].get(t["code"], {})
+    return {"ticket": mask_obj(t), "category": entry.get("category"),
+            "required_fields": entry.get("required_fields", []),
+            "updates": mask_obj(_store_call(store.record_updates, "ticket", ticket_id)),
+            "statuses": TICKET_STATUSES}
+
+
+@router.post("/tickets/{ticket_id}/updates")
+def update_ticket(ticket_id: str, body: StatusUpdate):
+    return _update("ticket", ticket_id, body, TICKET_STATUSES)
+
+
+@router.get("/handoffs")
+def handoffs(status: str | None = None, rule_id: str | None = None, q: str | None = None, limit: int = 100):
+    store = get_store()
+    rows = _store_call(store.list_handoffs, status, rule_id, q, min(limit, 500))
+    return {"handoffs": mask_obj(rows), "counts": _store_call(store.status_counts, "handoffs"),
+            "statuses": HANDOFF_STATUSES}
+
+
+@router.get("/handoffs/{ref_id}")
+def handoff_record(ref_id: str):
+    store = get_store()
+    h = _store_call(store.get_handoff, ref_id)
+    if h is None:
+        raise HTTPException(404, "handoff not found")
+    return {"handoff": mask_obj(h), "updates": mask_obj(_store_call(store.record_updates, "handoff", ref_id)),
+            "statuses": HANDOFF_STATUSES}
+
+
+@router.post("/handoffs/{ref_id}/updates")
+def update_handoff(ref_id: str, body: StatusUpdate):
+    return _update("handoff", ref_id, body, HANDOFF_STATUSES)
+
+
+def _update(kind: str, ref: str, body: StatusUpdate, statuses: list[str]):
+    store = get_store()
+    current = _store_call(store.get_ticket_record if kind == "ticket" else store.get_handoff, ref)
+    if current is None:
+        raise HTTPException(404, f"{kind} not found")
+    if body.status and body.status not in statuses:
+        raise HTTPException(422, {"errors": [f"status must be one of {', '.join(statuses)}"]})
+    changed = bool(body.status) and body.status != current.get("status")
+    note = (body.note or "").strip() or None
+    if not changed and not note:
+        raise HTTPException(422, {"errors": ["change the status or add a note"]})
+    if changed:
+        _store_call(store.set_ticket_status if kind == "ticket" else store.set_handoff_status, ref, body.status)
+    _store_call(store.add_update, {"kind": kind, "ref": ref, "old_status": current.get("status") if changed else None,
+                                   "new_status": body.status if changed else None, "note": note,
+                                   "author": body.author})
     return {"ok": True}
 
 

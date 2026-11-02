@@ -202,6 +202,8 @@
   // ---------- tabs ----------
   const tabs = {
     interactions: { start: () => interactions.start(), stop: () => interactions.stop() },
+    tickets: { start: () => trackers.ticket.start(), stop: () => trackers.ticket.stop() },
+    handoffs: { start: () => trackers.handoff.start(), stop: () => trackers.handoff.stop() },
     flow: { start: () => flowEditor.load(), stop: () => {} },
     files: { start: () => files.load(), stop: () => {} },
     kb: { start: () => kb.start(), stop: () => kb.stop() },
@@ -458,7 +460,7 @@
 
     function ticketCard(t) {
       return h("div", { class: "record" },
-        h("div", { class: "row" }, h("strong", { class: "mono" }, t.ticket_id),
+        h("div", { class: "row" }, h("button", { class: "linkish mono", onclick: () => trackers.ticket.open(t.ticket_id) }, t.ticket_id),
           h("span", { class: "chip ok" }, t.status), h("span", {}, `${t.code} → ${t.unit || ""}`),
           h("span", { class: "hint" }, clock(t.opened_at))),
         kv({ location: t.location, postal_code: t.postal_code, ...(t.fields || {}) }));
@@ -466,7 +468,7 @@
 
     function handoffCard(o) {
       return h("div", { class: "record" },
-        h("div", { class: "row" }, h("strong", { class: "mono" }, o.ref_id), ruleChip(o.rule_id),
+        h("div", { class: "row" }, h("button", { class: "linkish mono", onclick: () => trackers.handoff.open(o.ref_id) }, o.ref_id), ruleChip(o.rule_id),
           h("span", { class: "chip warn" }, o.status), h("span", {}, o.reason || ""),
           h("span", { class: "hint" }, clock(o.created_at))),
         kv({ code: o.code, confidence: o.confidence, ...(o.fields || {}),
@@ -507,8 +509,224 @@
     return {
       start() { loadRef().catch(console.warn); listPoll.start(); if (selected) detailPoll.start(); },
       stop() { listPoll.stop(); detailPoll.stop(); },
+      open(id) {
+        $("follow").checked = false;
+        if (currentTab !== "interactions") showTab("interactions");
+        select(id);
+      },
     };
   })();
+
+  // =====================================================================
+  // Tickets and handoffs: live lists, detail, status tracking
+  // =====================================================================
+  const statusLabel = (s) => (s || "").replace(/_/g, " ").replace(/^./, (c) => c.toUpperCase());
+  const statusClass = (s) => ({ open: "accent", in_progress: "warn", closed: "ok", pending: "warn", in_review: "accent", resolved: "ok" }[s] || "");
+
+  function tracker(kind) {
+    const isTicket = kind === "ticket";
+    const base = isTicket ? "/tickets" : "/handoffs";
+    const filter = { status: "", extra: "", q: "" };
+    let selected = null;
+    let listSig = "";
+    let detailSig = "";
+    let filtersBuilt = false;
+    const countEls = {};
+    const poll = poller(load, 5000);
+
+    function buildFilters(data) {
+      const chips = h("div", { class: "status-chips", role: "group", "aria-label": "Status" },
+        ["", ...data.statuses].map((s) => {
+          const count = h("span", { class: "count" });
+          countEls[s] = count;
+          return h("button", {
+            class: `chip-btn ${filter.status === s ? "on" : ""}`, "data-status": s,
+            onclick: (e) => {
+              filter.status = s;
+              e.currentTarget.parentElement.querySelectorAll(".chip-btn").forEach((b) => b.classList.toggle("on", b.dataset.status === s));
+              listSig = "";
+              poll.now();
+            },
+          }, s ? statusLabel(s) : "All", " ", count);
+        }));
+      const extra = h("select", { "aria-label": isTicket ? "Service code" : "Rule", onchange: (e) => { filter.extra = e.target.value; listSig = ""; poll.now(); } },
+        h("option", { value: "" }, isTicket ? "All codes" : "All rules"),
+        (isTicket ? data.codes : Object.keys(REF.rules).filter((r) => /^[AEMF]/.test(r))).map((c) => h("option", { value: c }, c)));
+      let timer = null;
+      const search = h("input", {
+        type: "search", placeholder: isTicket ? "Ticket number or location" : "Reference, reason or code",
+        "aria-label": "Search",
+        oninput: (e) => { clearTimeout(timer); timer = setTimeout(() => { filter.q = e.target.value.trim(); listSig = ""; poll.now(); }, 300); },
+      });
+      fill($(`${kind}-filters`), chips, h("div", { class: "filter-row" }, extra, search));
+      filtersBuilt = true;
+    }
+
+    async function load() {
+      const params = new URLSearchParams();
+      if (filter.status) params.set("status", filter.status);
+      if (filter.extra) params.set(isTicket ? "code" : "rule_id", filter.extra);
+      if (filter.q) params.set("q", filter.q);
+      const data = await api(`${base}?${params}`);
+      if (!filtersBuilt) buildFilters(data);
+      const total = Object.values(data.counts).reduce((a, b) => a + b, 0);
+      for (const [s, el] of Object.entries(countEls)) el.textContent = s ? (data.counts[s] || 0) : total;
+
+      const rows = data[isTicket ? "tickets" : "handoffs"];
+      const sig = JSON.stringify([rows, selected]);
+      if (sig !== listSig) {
+        listSig = sig;
+        fill($(`${kind}-list`), rows.length ? rows.map(isTicket ? ticketItem : handoffItem)
+          : [h("p", { class: "hint pad" }, filter.status || filter.extra || filter.q ? "Nothing matches these filters." : `No ${kind}s yet.`)]);
+      }
+      if (selected) await loadDetail();
+    }
+
+    function ticketItem(t) {
+      return h("button", { class: `item ${t.ticket_id === selected ? "selected" : ""}`, onclick: () => open(t.ticket_id) },
+        h("div", { class: "title" }, h("span", { class: "mono" }, t.ticket_id), " · ", t.location || "(no location)"),
+        h("div", { class: "meta" }, h("span", { class: `chip ${statusClass(t.status)}` }, statusLabel(t.status)),
+          h("span", { class: "mono" }, t.code), h("span", {}, t.unit || ""), h("span", {}, ago(t.opened_at))));
+    }
+
+    function handoffItem(o) {
+      return h("button", { class: `item ${o.ref_id === selected ? "selected" : ""}`, onclick: () => open(o.ref_id) },
+        h("div", { class: "title" }, h("span", { class: "mono" }, o.ref_id), " · ", o.reason || "(no reason)"),
+        h("div", { class: "meta" }, h("span", { class: `chip ${statusClass(o.status)}` }, statusLabel(o.status)),
+          ruleChip(o.rule_id), o.code ? h("span", { class: "mono" }, o.code) : null, h("span", {}, ago(o.created_at))));
+    }
+
+    function open(id) {
+      selected = id;
+      detailSig = "";
+      listSig = "";
+      if (currentTab !== `${kind}s`) showTab(`${kind}s`);
+      else poll.now();
+    }
+
+    async function loadDetail() {
+      const id = selected;
+      let data;
+      try {
+        data = await api(`${base}/${encodeURIComponent(id)}`);
+      } catch (e) {
+        fill($(`${kind}-detail`), h("div", { class: "empty-state" }, e.message));
+        return;
+      }
+      if (id !== selected) return;
+      const sig = JSON.stringify(data);
+      // Don't redraw under someone typing a note.
+      const note = document.querySelector(`#${kind}-detail textarea`);
+      if (sig === detailSig || (note && note.value.trim())) return;
+      detailSig = sig;
+      render(data);
+    }
+
+    function kvList(obj) {
+      const entries = Object.entries(obj).filter(([, v]) => v !== null && v !== undefined && v !== "");
+      if (!entries.length) return h("p", { class: "hint" }, "Nothing recorded.");
+      return h("dl", { class: "kv" }, entries.flatMap(([k, v]) => [
+        h("dt", {}, k.replace(/_/g, " ")), h("dd", {}, typeof v === "object" ? JSON.stringify(v) : String(v)),
+      ]));
+    }
+
+    function history(createdAt, createdText, updates) {
+      return h("ol", { class: "history-list" },
+        h("li", {}, h("span", { class: "when" }, new Date(createdAt).toLocaleString()), h("span", {}, createdText)),
+        updates.map((u) => h("li", {},
+          h("span", { class: "when" }, new Date(u.created_at).toLocaleString()),
+          h("span", {},
+            h("strong", {}, u.author || "someone"),
+            u.new_status ? [" changed status ", h("span", { class: `chip ${statusClass(u.old_status)}` }, statusLabel(u.old_status)), " → ",
+              h("span", { class: `chip ${statusClass(u.new_status)}` }, statusLabel(u.new_status))] : " added a note",
+            u.note ? h("div", { class: "note-text" }, u.note) : null))));
+    }
+
+    function updateForm(id, status, statuses) {
+      const sel = h("select", { "aria-label": "Status" }, statuses.map((s) => h("option", { value: s, selected: s === status }, statusLabel(s))));
+      const note = h("textarea", { rows: "2", placeholder: "Note for the team (optional when changing status)", maxlength: "1000" });
+      const msg = h("span", { class: "hint" });
+      const save = h("button", {
+        class: "btn primary",
+        onclick: async () => {
+          save.disabled = true;
+          try {
+            await api(`${base}/${encodeURIComponent(id)}/updates`, {
+              method: "POST", body: JSON.stringify({ status: sel.value, note: note.value.trim() || null, author: who() }),
+            });
+            note.value = "";
+            detailSig = "";
+            listSig = "";
+            await load();
+          } catch (e) {
+            msg.className = "hint error-text";
+            msg.textContent = (e.errors || [e.message]).join(" ");
+            save.disabled = false;
+          }
+        },
+      }, "Save update");
+      return h("div", { class: "update-form" }, h("h3", {}, "Update"),
+        h("div", { class: "ed-actions" }, h("label", { class: "ne-field inline" }, h("span", {}, "Status"), sel), save, msg), note,
+        who() ? null : h("p", { class: "hint" }, "Tip: fill in Your name at the top so the history shows who made the change."));
+    }
+
+    const convoLink = (iid) => iid
+      ? h("button", { class: "btn small", onclick: () => interactions.open(iid) }, "Open the conversation ↗")
+      : h("span", { class: "hint" }, "No linked conversation (created before tracking, or seeded).");
+
+    function render(data) {
+      if (isTicket) {
+        const t = data.ticket;
+        fill($("ticket-detail"),
+          h("div", { class: "rec-head" },
+            h("h2", { class: "mono" }, t.ticket_id),
+            h("span", { class: `chip ${statusClass(t.status)}` }, statusLabel(t.status)),
+            h("span", {}, `${t.code}: ${data.category || ""} → ${t.unit || ""}`),
+            h("span", { class: "hint" }, `opened ${new Date(t.opened_at).toLocaleString()} (${ago(t.opened_at)})`)),
+          h("div", { class: "rec-grid" },
+            h("section", {}, h("h3", {}, "Where"), kvList({ location: t.location, postal_code: t.postal_code })),
+            h("section", {}, h("h3", {}, "What was collected"),
+              kvList(Object.fromEntries([...data.required_fields.map((f) => [f, (t.fields || {})[f] ?? "(missing)"]),
+                ...Object.entries(t.fields || {}).filter(([k]) => !data.required_fields.includes(k))])))),
+          h("div", { class: "ed-actions" }, convoLink(t.interaction_id)),
+          updateForm(t.ticket_id, t.status, data.statuses),
+          h("h3", {}, "History"),
+          history(t.opened_at, "Created by the agent", data.updates),
+          h("p", { class: "hint" }, "Shown masked (D6) because this page has no login yet. The agent itself can never edit, close or reprioritize a ticket (A7)."));
+        return;
+      }
+      const o = data.handoff;
+      const rule = REF.rules[o.rule_id];
+      fill($("handoff-detail"),
+        h("div", { class: "rec-head" },
+          h("h2", { class: "mono" }, o.ref_id),
+          h("span", { class: `chip ${statusClass(o.status)}` }, statusLabel(o.status)),
+          ruleChip(o.rule_id),
+          h("span", { class: "hint" }, `${new Date(o.created_at).toLocaleString()} (${ago(o.created_at)})`)),
+        h("p", { class: "rec-reason" }, h("strong", {}, "Why: "), o.reason || "(no reason given)",
+          rule ? h("span", { class: "hint" }, ` · ${o.rule_id}: ${rule.text}`) : null),
+        h("div", { class: "rec-grid" },
+          h("section", {}, h("h3", {}, "Routing"), kvList({ code: o.code, confidence: o.confidence })),
+          h("section", {}, h("h3", {}, "What was collected"), kvList(o.fields || {}))),
+        (o.possible_duplicates || []).length ? h("section", {}, h("h3", {}, "Possible duplicates"),
+          h("div", { class: "ed-actions" }, o.possible_duplicates.map((d) =>
+            h("button", { class: "btn small mono", onclick: () => trackers.ticket.open(d.ticket_id) }, `${d.ticket_id} (${d.status})`)))) : null,
+        h("div", { class: "ed-actions" }, convoLink(o.interaction_id)),
+        updateForm(o.ref_id, o.status, data.statuses),
+        h("h3", {}, "Transcript (masked)"),
+        h("div", { class: "transcript" }, (o.transcript || []).map((m) =>
+          h("div", { class: `bubble ${m.role === "resident" ? "resident-b" : "agent-b"}` }, m.text))),
+        h("h3", {}, "History"),
+        history(o.created_at, `Handed off by the agent under ${o.rule_id}`, data.updates));
+    }
+
+    return {
+      start() { poll.start(); },
+      stop() { poll.stop(); },
+      open,
+    };
+  }
+  const trackers = { ticket: tracker("ticket"), handoff: tracker("handoff") };
 
   // =====================================================================
   // Flow: edit the interaction tree

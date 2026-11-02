@@ -50,11 +50,16 @@ def strip_rule_ids(reply: str) -> tuple[str, bool]:
     return clean.strip(), True
 
 
-def invented_ids(reply: str, known_ids: set[str]) -> list[str]:
-    """M3 [hard]: ticket or handoff IDs in the reply that no tool returned."""
+def ids_in(text: str) -> set[str]:
+    """Ticket and handoff reference IDs in a text."""
     _, ticket_re, handoff_re, _ = _patterns()
-    ids = set(ticket_re.findall(reply)) | set(handoff_re.findall(reply))
-    return sorted(ids - known_ids)
+    return set(ticket_re.findall(text or "")) | set(handoff_re.findall(text or ""))
+
+
+def invented_ids(reply: str, known_ids: set[str]) -> list[str]:
+    """M3 [hard]: ticket or handoff IDs in the reply that no tool returned (and the
+    resident didn't give: repeating their own ticket number is not inventing one)."""
+    return sorted(ids_in(reply) - known_ids)
 
 
 def claim_phrase(reply: str) -> str | None:

@@ -202,3 +202,57 @@ def test_kb_document_created_in_admin_is_searchable_at_once(fresh_store):
     assert not kb_search("park washrooms")["passages"]
     client.delete(f"/api/admin/kb/{doc['id']}")
     assert client.get("/api/admin/kb").json()["documents"] == []
+
+
+# ---------------------------------------------------------------- tickets and handoffs
+
+def _ticket_conversation(llm):
+    llm([tool_call("policy_lookup", {"code": "SW-BIN"})],
+        [tool_call("create_ticket", {"code": "SW-BIN", "fields": {
+            "address": "12 Oak Street, G1A 1A1", "bin_type": "recycling", "damage_type": "cracked lid"}})],
+        "Done.")
+    return chat("My recycling bin lid is cracked at 12 Oak Street").json()["interaction_id"]
+
+
+def test_ticket_is_listed_linked_and_tracked(llm, fresh_store):
+    iid = _ticket_conversation(llm)
+    r = client.get("/api/admin/tickets").json()
+    t = r["tickets"][0]
+    assert t["interaction_id"] == iid and r["counts"] == {"open": 1}
+    assert "12 Oak" not in str(r) and "contact" not in t                              # D6, D1
+
+    tid = t["ticket_id"]
+    assert client.post(f"/api/admin/tickets/{tid}/updates", json={}).status_code == 422   # nothing to record
+    assert client.post(f"/api/admin/tickets/{tid}/updates", json={"status": "done"}).status_code == 422
+    ok = client.post(f"/api/admin/tickets/{tid}/updates",
+                     json={"status": "in_progress", "note": "crew booked", "author": "Sam"})
+    assert ok.status_code == 200
+    d = client.get(f"/api/admin/tickets/{tid}").json()
+    assert d["ticket"]["status"] == "in_progress" and d["required_fields"] == ["address", "bin_type", "damage_type"]
+    u = d["updates"][0]
+    assert (u["old_status"], u["new_status"], u["note"], u["author"]) == ("open", "in_progress", "crew booked", "Sam")
+    assert client.get("/api/admin/tickets", params={"status": "open"}).json()["tickets"] == []
+    assert client.get("/api/admin/tickets", params={"q": tid[-3:]}).json()["tickets"]
+
+
+def test_handoff_is_listed_and_tracked(llm, fresh_store):
+    llm([tool_call("handoff", {"rule_id": "E2", "reason": "resident injured by bin"})])
+    chat("The bin fell on me and hurt my foot")
+    r = client.get("/api/admin/handoffs").json()
+    o = r["handoffs"][0]
+    assert o["rule_id"] == "E2" and o["status"] == "pending" and r["counts"] == {"pending": 1}
+    assert client.get("/api/admin/handoffs", params={"rule_id": "E7"}).json()["handoffs"] == []
+    client.post(f"/api/admin/handoffs/{o['ref_id']}/updates", json={"status": "resolved", "note": "called back"})
+    d = client.get(f"/api/admin/handoffs/{o['ref_id']}").json()
+    assert d["handoff"]["status"] == "resolved" and d["handoff"]["transcript"]
+    assert d["updates"][0]["new_status"] == "resolved"
+    assert client.get("/api/admin/handoffs/HO-0000-000000").status_code == 404
+
+
+# ---------------------------------------------------------------- cache busting
+
+def test_pages_point_at_versioned_static_files():
+    r = client.get("/admin")
+    assert r.headers["cache-control"] == "no-cache"
+    assert '/static/admin.js?v=' in r.text and '/static/admin.css?v=' in r.text
+    assert '/static/app.js?v=' in client.get("/").text

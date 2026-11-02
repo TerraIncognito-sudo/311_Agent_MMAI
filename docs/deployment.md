@@ -26,6 +26,11 @@ git pull
 docker compose up -d --build
 ```
 
+Static files (`.js`, `.css`) are linked with a content hash
+(`/static/admin.js?v=...`) and the pages themselves are sent `no-cache`, so
+Cloudflare's edge cache (4 hours for `.js`/`.css` by default) never serves an
+old script after a deploy.
+
 Policy, prompts, guardrails, the interaction tree and the knowledge base
 all live in Supabase, so changing them needs nothing on the server: edit
 them in `/admin` and the running site uses them for the next message. Only

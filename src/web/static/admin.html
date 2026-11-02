@@ -13,6 +13,8 @@
     <div class="brand"><span id="site-title">311</span> <span class="brand-sub">Admin</span></div>
     <nav class="tabs" role="tablist">
       <button role="tab" data-tab="interactions" aria-selected="true">Interactions</button>
+      <button role="tab" data-tab="tickets">Tickets</button>
+      <button role="tab" data-tab="handoffs">Handoffs</button>
       <button role="tab" data-tab="flow">Flow</button>
       <button role="tab" data-tab="files">Files</button>
       <button role="tab" data-tab="kb">Knowledge base</button>
@@ -36,6 +38,29 @@
     </aside>
     <div class="detail-pane" id="int-detail">
       <div class="empty-state">Pick a conversation to walk through the agent's logic step by step.<br>New conversations on the chat site appear here within a few seconds.</div>
+    </div>
+  </section>
+
+  <!-- Tickets and handoffs: live from Supabase, with status tracking -->
+  <section id="tab-tickets" class="tab-panel split" hidden>
+    <aside class="list-pane">
+      <div class="pane-head"><strong>Tickets</strong><span class="hint live-note">live</span></div>
+      <div id="ticket-filters" class="filters"></div>
+      <div id="ticket-list" class="list"></div>
+    </aside>
+    <div class="detail-pane" id="ticket-detail">
+      <div class="empty-state">Pick a ticket to see its details, the conversation that created it, and its history. Change its status or add a note as it moves along.</div>
+    </div>
+  </section>
+
+  <section id="tab-handoffs" class="tab-panel split" hidden>
+    <aside class="list-pane">
+      <div class="pane-head"><strong>Handoffs</strong><span class="hint live-note">live</span></div>
+      <div id="handoff-filters" class="filters"></div>
+      <div id="handoff-list" class="list"></div>
+    </aside>
+    <div class="detail-pane" id="handoff-detail">
+      <div class="empty-state">Pick a handoff to see why the agent passed it on, what it collected and the transcript. Mark it in review or resolved as staff work through it.</div>
     </div>
   </section>
 
