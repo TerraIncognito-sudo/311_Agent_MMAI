@@ -21,7 +21,7 @@ llm:
   request_timeout_s: 120
 
 agent:
-  system_prompt: agent/system_v1.md   # path under config/prompts/
+  system_prompt: agent/system_v1.md   # file under prompts/ (Files tab in /admin)
   session_ttl_minutes: 60
 
 retrieval:

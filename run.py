@@ -36,7 +36,11 @@ def config(args):
     if len(args) != 2 or args[0] not in ("pull", "push"):
         print(config.__doc__)
         sys.exit(1)
+    from src.tools.store import MemoryStore
     store, folder = get_store(), Path(args[1])
+    if isinstance(store, MemoryStore):   # no Supabase credentials: refuse rather than "succeed" in memory
+        print("Supabase isn't configured (SUPABASE_URL and SUPABASE_SERVICE_KEY in .env, USE_MEMORY_STORE=0).")
+        sys.exit(1)
     if args[0] == "pull":
         for row in store.list_config():
             target = folder / row["path"]

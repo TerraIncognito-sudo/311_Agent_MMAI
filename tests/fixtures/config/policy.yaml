@@ -92,8 +92,8 @@ service_catalogue:
       - hazardous material (needles, chemicals, asbestos, propane)
     duplicate_window: {radius_m: 50, days: 7}
 
-# Global rules by ID. hard: true means enforced in code (src/agent/rules.py,
-# src/guardrails/), not only in the prompt.
+# Global rules by ID. hard: true means enforced in code or by the interaction
+# tree (flow.yaml, src/guardrails/), not only in the prompt.
 rules:
   A1: {text: Classify a request into a service code; code must exist in the policy store, hard: true}
   A2: {text: Look up the category's policy before asking for fields or creating a ticket, hard: true}
