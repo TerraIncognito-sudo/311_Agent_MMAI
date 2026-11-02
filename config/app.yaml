@@ -27,6 +27,9 @@ agent:
 retrieval:
   # Knowledge base lives in Supabase (kb_documents / kb_chunks).
   top_k: 4
+  # The server re-chunks new or edited kb_documents rows this often (seconds),
+  # so dashboard edits go live without a redeploy. 0 turns it off.
+  sync_interval_s: 60
   chunk_chars: 1200
   chunk_overlap: 150
   # Embeddings are optional. With provider "none", retrieval uses Postgres

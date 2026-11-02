@@ -1,7 +1,7 @@
 """One entry point for every task (owner: E). Mirrors the Makefile.
 
     python run.py serve      start the chat site (http://HOST:PORT)
-    python run.py ingest     load data/kb into the Supabase knowledge base
+    python run.py ingest     re-chunk changed Supabase KB documents now (--import DIR to bulk upload)
     python run.py test       run the test suite
 """
 from __future__ import annotations

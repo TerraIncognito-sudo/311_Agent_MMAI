@@ -14,7 +14,7 @@ Supabase. They are marked **proposed** until D's Nov 5 interface session.
 | Event log | D | Supabase `interaction_events` | W6, W7 |
 | Results file | F | `results/<run_id>.csv`, `results/summary.json` | W6, W7, report |
 | LLM backbone (proposed) | D/C | `src/models/llm.py` | W4, W5, W6 |
-| Knowledge base (proposed) | D/A | Supabase `kb_documents`, `kb_chunks`; `data/kb/` | W4, RAG team |
+| Knowledge base (proposed) | D/A | Supabase `kb_documents`, `kb_chunks` | W4, RAG team |
 | Web API (proposed) | E | `src/web/server.py` | W5 demo |
 
 ## Interaction record (A)
@@ -88,7 +88,10 @@ then E9) from setup problems (bad key, unknown model; shown to the user).
 - RPC `match_kb_chunks(query_text, query_embedding default null, match_count)`
   returns `(id, document_id, title, source, content, score)`; full-text always,
   plus vector search fused by RRF when an embedding is passed.
-- `python run.py ingest` loads `data/kb/` and re-chunks changed documents.
+- Supabase is the only source of KB content. The server re-chunks new and
+  edited `kb_documents` rows every `retrieval.sync_interval_s` seconds.
+- `python run.py ingest` re-chunks now; `--import DIR` bulk-uploads a folder
+  of `.md`/`.txt` files first.
 
 ## Web API (proposed)
 

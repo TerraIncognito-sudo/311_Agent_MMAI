@@ -65,11 +65,11 @@ create table if not exists interaction_events (
 create index if not exists events_interaction on interaction_events (interaction_id, created_at);
 
 -- ---------------------------------------------------------------- knowledge base
--- kb_documents: one row per source document. Edit content here or in data/kb/,
--- then run `python run.py ingest` to re-chunk changed documents.
+-- kb_documents: one row per source document, edited in the Supabase dashboard.
+-- The running server re-chunks new and changed rows on its own (src/rag/ingest.py).
 create table if not exists kb_documents (
   id           uuid primary key default gen_random_uuid(),
-  source       text not null unique,      -- e.g. data/kb/waste_collection.md, or any label
+  source       text not null unique,      -- any unique label, e.g. waste_collection
   title        text not null,
   content      text not null,
   content_hash text,

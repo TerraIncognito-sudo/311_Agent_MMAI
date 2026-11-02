@@ -26,15 +26,16 @@ git pull
 docker compose up -d --build
 ```
 
-`config/` and `data/kb/` are mounted into the container, so for policy,
-prompt or knowledge-base changes alone, `git pull` then
-`docker compose restart` is enough.
+`config/` is mounted into the container, so for policy or prompt changes
+alone, `git pull` then `docker compose restart` is enough. Knowledge-base
+changes need nothing: edit `kb_documents` in Supabase and the running site
+picks them up within `retrieval.sync_interval_s` (60 s).
 
 | Task | Command |
 |---|---|
 | Logs | `docker compose logs -f` |
 | Health | `curl http://127.0.0.1:8311/api/health` |
-| Load / refresh the knowledge base | `docker compose run --rm app python run.py ingest` |
+| Re-chunk the knowledge base now | `docker compose exec app python run.py ingest` |
 | Stop | `docker compose down` |
 
 Notes:

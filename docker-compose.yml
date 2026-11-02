@@ -26,7 +26,7 @@ services:
       # Set PUBLISH_ADDRESS=0.0.0.0 in .env to also reach it from the LAN.
       - "${PUBLISH_ADDRESS:-127.0.0.1}:8311:8311"
     volumes:
-      # Config and knowledge base are mounted so policy/prompt/KB edits apply
-      # after `git pull` + `docker compose restart`, without a rebuild.
+      # Config is mounted so policy/prompt edits apply after `git pull` +
+      # `docker compose restart`, without a rebuild. The knowledge base lives
+      # only in Supabase and is read live; it needs neither.
       - ./config:/app/config:ro
-      - ./data/kb:/app/data/kb:ro

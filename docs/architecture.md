@@ -59,3 +59,9 @@ store (tests, CI, offline dev).
 with reciprocal rank fusion. The policy store is NOT in the knowledge base:
 routing, required fields and escalation triggers come only from
 `config/policy.yaml` via `policy_lookup`.
+
+The knowledge base lives only in Supabase (`kb_documents`); there are no
+article files in the repo. A background thread in the server
+(`src/rag/ingest.py` `start_sync`) re-chunks new and edited rows every
+`retrieval.sync_interval_s` seconds, so dashboard edits reach the agent
+without a redeploy. `active = false` hides a document at once.

@@ -1,4 +1,6 @@
 """W4 tool contracts (docs/interfaces.md): every tool returns a dict with ok and error."""
+import time
+
 from src.models.classifier import classify
 from src.tools.handoff import handoff
 from src.tools.knowledge import kb_search
@@ -51,9 +53,37 @@ def test_classifier_interface():
     assert set(r) == {"code", "confidence", "top2"} and r["code"] == "SW-BIN"
 
 
-def test_kb_search_returns_ingested_passages(fresh_store):
-    from src.rag.ingest import chunk_stale, load_files
-    load_files(fresh_store)
-    chunk_stale(fresh_store)
+KB_DOC = {"source": "waste_collection", "title": "Waste collection",
+          "content": "# Waste collection\n\nCarts must be at the curb by 7:00 a.m. on collection day."}
+
+
+def test_kb_search_returns_synced_passages(fresh_store):
+    from src.rag.ingest import chunk_stale
+    fresh_store.upsert_document(KB_DOC)                      # a row added in the dashboard
+    assert chunk_stale(fresh_store) == 1
     r = kb_search("what time do carts need to be at the curb")
     assert r["ok"] and any("7:00" in p["text"] for p in r["passages"])
+
+
+def test_kb_dashboard_edit_goes_live_without_redeploy(fresh_store):
+    from src.rag.ingest import start_sync
+    fresh_store.upsert_document(KB_DOC)
+    stop = start_sync(0.05, store=fresh_store)
+    try:
+        fresh_store.upsert_document({**KB_DOC, "content": "Carts must be at the curb by 6:30 a.m."})
+        deadline = time.time() + 5
+        while time.time() < deadline and not any("6:30" in c["content"] for c in fresh_store.chunks):
+            time.sleep(0.05)
+    finally:
+        stop.set()
+    texts = [p["text"] for p in kb_search("curb carts time")["passages"]]
+    assert any("6:30" in t for t in texts) and not any("7:00" in t for t in texts)
+
+
+def test_kb_bulk_import(fresh_store, tmp_path):
+    from src.rag.ingest import chunk_stale, import_files
+    (tmp_path / "parks.md").write_text("# Parks\n\nPark washrooms open May to October.", encoding="utf-8")
+    (tmp_path / "README.md").write_text("not a KB article", encoding="utf-8")
+    assert import_files(fresh_store, tmp_path) == 1
+    chunk_stale(fresh_store)
+    assert kb_search("park washrooms")["passages"][0]["title"] == "Parks"

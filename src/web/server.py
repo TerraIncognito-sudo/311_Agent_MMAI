@@ -6,6 +6,7 @@ one model call, and is never stored, logged or echoed back.
 """
 from __future__ import annotations
 
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI, Header, HTTPException
@@ -16,11 +17,21 @@ from pydantic import BaseModel, Field
 from src.agent.orchestrator import SetupError, handle_turn
 from src.config import app_config
 from src.models.llm import LLMSelection, list_models
+from src.rag.ingest import start_sync
 from src.tools.store import MemoryStore, get_store
 
 STATIC = Path(__file__).parent / "static"
 
-app = FastAPI(title="Gilead 311 Agent", docs_url=None, redoc_url=None)
+@asynccontextmanager
+async def lifespan(_app):
+    # Knowledge-base edits made in Supabase go live without a redeploy.
+    stop = start_sync(app_config()["retrieval"].get("sync_interval_s", 0))
+    yield
+    if stop:
+        stop.set()
+
+
+app = FastAPI(title="Gilead 311 Agent", docs_url=None, redoc_url=None, lifespan=lifespan)
 app.mount("/static", StaticFiles(directory=STATIC), name="static")
 
 

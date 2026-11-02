@@ -46,8 +46,7 @@ See [docs/deployment.md](docs/deployment.md) for updates, logs and the Cloudflar
 3. Project Settings > API: copy the project URL and the **service_role /
    secret** key into `.env` (`SUPABASE_URL`, `SUPABASE_SERVICE_KEY`).
    The secret key stays on the server; RLS blocks the public anon key.
-4. Load the knowledge base: `python run.py ingest`
-   (in Docker: `docker compose run --rm app python run.py ingest`).
+4. Add knowledge-base articles as rows in `kb_documents` (see below).
 
 Tables: `tickets`, `handoffs`, `interaction_events` (event log),
 `kb_documents`, `kb_chunks`. Collaborators can browse and edit them in the
@@ -55,13 +54,23 @@ Supabase Table Editor.
 
 ## Working on the knowledge base (RAG)
 
-- Add or edit Markdown files in `data/kb/` (see [data/kb/README.md](data/kb/README.md)),
-  or edit rows in `kb_documents` in the Supabase dashboard.
-- Run `python run.py ingest` (or `--skip-files` after dashboard-only edits).
-  Only changed documents are re-chunked.
+The knowledge base lives only in Supabase; there are no article files in
+the repo. The agent may state facts about City services only when `kb_search`
+returned them (policy rule C5).
+
+- Add, edit or delete rows in `kb_documents` in the Supabase Table Editor.
+  Fill `source` (any unique label), `title` and `content` (Markdown).
+  Set `active = false` to hide a document without deleting it.
+- The running site re-chunks new and changed rows on its own within
+  `retrieval.sync_interval_s` (60 s). No pull, restart or redeploy.
+- One topic per document; short paragraphs separated by blank lines (chunks
+  are cut on blank lines). Synthetic content only. Nothing here overrides
+  `config/policy.yaml`.
+- Bulk upload a folder of `.md`/`.txt` files: `python run.py ingest --import DIR`.
 - Retrieval is Postgres full-text search by default. For hybrid vector
   search: `ollama pull nomic-embed-text`, set
-  `retrieval.embedding_provider: ollama` in `config/app.yaml`, and re-ingest.
+  `retrieval.embedding_provider: ollama` in `config/app.yaml`, and set
+  `chunked_at = null` on every `kb_documents` row so they are re-embedded.
 - Tuning knobs (`top_k`, chunk size, overlap) are in `config/app.yaml`.
 
 ## Working on the LLM / prompts
@@ -83,12 +92,11 @@ src/agent/         orchestrator loop, deterministic rules layer
 src/tools/         policy_lookup, search_tickets, create_ticket, get_status, handoff, kb_search
 src/models/        LLM backbone (Ollama/OpenRouter), classify()
 src/guardrails/    input screen, masking/redaction, output check
-src/rag/           knowledge-base ingestion and embeddings
+src/rag/           knowledge-base sync (chunking) and embeddings
 src/web/           FastAPI server + static chat page
 src/data_gen/      synthetic data generation (W2)
 src/eval/          evaluation harness (W5/W6)
 supabase/          SQL migrations and seed data
-data/kb/           knowledge-base source documents
 data/test/         locked test sets (read only by the eval harness)
 tests/             pytest suite (no keys or network needed)
 results/           run outputs
@@ -100,7 +108,7 @@ docs/              interfaces, architecture, decisions, prompt changelog, deploy
 | Command | Make | What it does |
 |---|---|---|
 | `python run.py serve` | `make serve` | Start the chat site |
-| `python run.py ingest` | `make ingest` | Load `data/kb/` into Supabase and re-chunk changes |
+| `python run.py ingest` | `make ingest` | Re-chunk changed Supabase KB documents now (the server also does this every 60 s) |
 | `python run.py test` | `make test` | Run the tests (in-memory store, scripted model) |
 | `docker compose up -d --build` | | Build and start the site in Docker |
 
