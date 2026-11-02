@@ -49,3 +49,21 @@ def test_m3_blocks_claimed_ticket_without_create():
     assert not output_check.check(reply, set(), ticket_created=False).ok
     assert output_check.check(reply, set(), ticket_created=True).ok
     assert output_check.check("Which lane is the pothole in?", set(), ticket_created=False).ok
+
+
+def test_d8_strips_rule_ids_from_replies():
+    strip = output_check.strip_rule_ids
+    assert strip("I'm an automated assistant (M1). I can help.") == ("I'm an automated assistant. I can help.", True)
+    assert strip("I can't give a date [C1].")[0] == "I can't give a date."
+    assert strip("That's outside what I do (rules E10, S6), sorry.")[0] == "That's outside what I do, sorry."
+    # Untouched: postal codes, ticket IDs, ordinary parentheses
+    for text in ("Postal code (M5V 2T6) noted.", "Request 311-2026-000001 (Solid Waste).", "Which bin (garbage or recycling)?"):
+        assert strip(text) == (text, False)
+
+
+def test_d8_rule_ids_never_reach_the_resident(llm, sel, fresh_store):
+    from src.agent.orchestrator import handle_turn
+    llm("I'm an automated assistant (M1). What is the issue?")
+    out = handle_turn(None, "hello", sel)
+    assert out["reply"] == "I'm an automated assistant. What is the issue?"
+    assert any(e["rule_id"] == "D8" for e in fresh_store.events)

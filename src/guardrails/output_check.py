@@ -4,6 +4,8 @@ M3 [hard]: a ticket ID or handoff reference that no tool returned in this
     conversation means the model invented it; the reply is blocked.
 C1/C2/C4: commitment phrases (dates, priorities, refunds) are flagged and
     logged. Extend here to rewrite or block them.
+D8: policy rule IDs the model echoes from its prompt, such as "(M1)", are
+    removed by strip_rule_ids() before the reply is checked or shown.
 """
 from __future__ import annotations
 
@@ -30,6 +32,21 @@ def _patterns():
         re.compile(cfg["handoff_ref"]),
         re.compile(cfg["ticket_claim"], re.IGNORECASE),
     )
+
+
+@lru_cache
+def _rule_tag():
+    return re.compile(guardrails_config()["output_check"]["rule_id_tag"], re.IGNORECASE)
+
+
+def strip_rule_ids(reply: str) -> tuple[str, bool]:
+    """D8: remove parenthesised rule IDs. Returns (clean reply, whether any were removed)."""
+    clean = _rule_tag().sub("", reply)
+    if clean == reply:
+        return reply, False
+    clean = re.sub(r"[ \t]+([.,;:!?])", r"\1", clean)   # "assistant (M1)." -> "assistant."
+    clean = re.sub(r"[ \t]{2,}", " ", clean)
+    return clean.strip(), True
 
 
 def check(reply: str, known_ids: set[str], ticket_created: bool = True) -> OutputResult:

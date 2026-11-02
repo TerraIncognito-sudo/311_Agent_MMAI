@@ -185,7 +185,9 @@ def handle_turn(interaction_id: str | None, user_text: str, sel: LLMSelection) -
         msg = resp.message
         calls = msg.get("tool_calls") or []
         if not calls:
-            reply = (msg.get("content") or "").strip()
+            reply, stripped = output_check.strip_rule_ids((msg.get("content") or "").strip())   # D8
+            if stripped:
+                log_event(session, "output_check", rule_id="D8", outcome="rule_ids_removed")
             check = output_check.check(reply, st.known_ids, ticket_created=bool(st.ticket_ids))
             if not check.ok:                                  # M3 [hard]
                 log_event(session, "output_check", rule_id="M3", outcome="blocked", text=reply)
