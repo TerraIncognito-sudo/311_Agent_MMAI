@@ -13,7 +13,7 @@ llm:
   providers: [ollama, openrouter]
   default_provider: ollama
   default_models:
-    ollama: qwen3:8b
+    ollama: qwen3:4b-instruct
     openrouter: anthropic/claude-haiku-5.5
   temperature: 0.2
   max_tool_steps: 8          # cap on model->tool round trips per resident turn

@@ -90,7 +90,9 @@
     els.modelList.appendChild(frag);
     els.modelInput.placeholder = "Search models";
     els.modelHint.textContent = `${models.length} model${models.length === 1 ? "" : "s"} with tool support`;
-    if (!state.model[provider] && models.length) {
+    // Fall back to the first listed model when the configured default isn't installed.
+    const ids = new Set(models.map((m) => m.id));
+    if (models.length && (!state.model[provider] || (provider === "ollama" && !ids.has(state.model[provider])))) {
       state.model[provider] = models[0].id;
       els.modelInput.value = models[0].id;
       refreshModelButton();

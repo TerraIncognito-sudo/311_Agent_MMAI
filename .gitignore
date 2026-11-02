@@ -31,3 +31,6 @@ Thumbs.db
 
 # Local Claude Code settings
 .claude/
+
+# Server logs
+logs/
