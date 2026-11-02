@@ -1,0 +1,33 @@
+# Secrets
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+*.egg-info/
+
+# Cloudflare tunnel credentials
+*.cloudflared/
+cloudflared/*.json
+
+# Local data that must not be committed
+data/raw/
+results/scratch/
+
+# OS / editors
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+~$*.docx
+
+# Planning documents kept outside the repo (shared separately)
+/*.docx
+
+# Local Claude Code settings
+.claude/

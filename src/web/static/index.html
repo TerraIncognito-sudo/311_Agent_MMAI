@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>311</title>
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body class="empty">
+  <header class="topbar">
+    <button id="new-chat" class="icon-btn" title="New conversation" aria-label="New conversation">
+      <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none"/></svg>
+    </button>
+    <span id="topbar-title" class="topbar-title"></span>
+    <div class="model-wrap">
+      <button id="model-btn" class="model-btn" aria-haspopup="dialog" aria-expanded="false">
+        <span id="model-label">Choose model</span>
+        <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round"/></svg>
+      </button>
+      <div id="model-panel" class="model-panel" role="dialog" aria-label="Model settings" hidden>
+        <div class="seg" role="radiogroup" aria-label="Provider">
+          <button data-provider="ollama" role="radio">Local (Ollama)</button>
+          <button data-provider="openrouter" role="radio">OpenRouter</button>
+        </div>
+        <div id="key-row" class="field" hidden>
+          <label for="api-key">OpenRouter API key</label>
+          <input id="api-key" type="password" autocomplete="off" spellcheck="false" placeholder="sk-or-...">
+          <p class="hint">Kept in this tab's memory only. Never saved; you'll re-enter it after a reload.</p>
+        </div>
+        <div class="field">
+          <label for="model-input">Model</label>
+          <input id="model-input" list="model-list" autocomplete="off" spellcheck="false" placeholder="Loading models...">
+          <datalist id="model-list"></datalist>
+          <p id="model-hint" class="hint"></p>
+        </div>
+        <button id="model-done" class="primary">Done</button>
+      </div>
+    </div>
+  </header>
+
+  <main id="main">
+    <section class="hero">
+      <h1 id="city-title"></h1>
+      <p id="tagline" class="tagline"></p>
+    </section>
+    <div id="messages" class="messages" aria-live="polite"></div>
+  </main>
+
+  <footer class="composer-wrap">
+    <div class="composer">
+      <textarea id="input" rows="1" placeholder="" aria-label="Message"></textarea>
+      <button id="send" class="send" aria-label="Send" disabled>
+        <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M12 19V5M5 12l7-7 7 7" stroke="currentColor" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>
+    </div>
+    <p class="fineprint">Automated assistant. For emergencies, call 911.</p>
+  </footer>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

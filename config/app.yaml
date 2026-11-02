@@ -1,0 +1,36 @@
+# Site and runtime settings (owner: E, W5 Repo, harness and demo).
+# Secrets never go here: keys and URLs for Supabase/Ollama live in .env.
+
+site:
+  city_name: Gilead
+  title: City of Gilead 311
+  tagline: Automated assistant for non-emergency City service requests. For emergencies, call 911.
+  input_placeholder: Describe the issue and where it is...
+
+llm:
+  # Providers the UI may offer. OpenRouter keys are supplied by the user in the
+  # browser, sent per request, and never stored or logged by the server.
+  providers: [ollama, openrouter]
+  default_provider: ollama
+  default_models:
+    ollama: qwen3:8b
+    openrouter: anthropic/claude-haiku-5.5
+  temperature: 0.2
+  max_tool_steps: 8          # cap on model->tool round trips per resident turn
+  request_timeout_s: 120
+
+agent:
+  system_prompt: agent/system_v1.md   # path under config/prompts/
+  session_ttl_minutes: 60
+
+retrieval:
+  # Knowledge base lives in Supabase (kb_documents / kb_chunks).
+  top_k: 4
+  chunk_chars: 1200
+  chunk_overlap: 150
+  # Embeddings are optional. With provider "none", retrieval uses Postgres
+  # full-text search only. "ollama" adds vector search (hybrid, RRF).
+  # dimensions MUST match the vector(...) column in supabase/migrations.
+  embedding_provider: none     # none | ollama
+  embedding_model: nomic-embed-text
+  embedding_dimensions: 768

@@ -1,0 +1,65 @@
+# Guardrail patterns (owner: B, W1 Policy and guardrails).
+# Used by src/guardrails/. Patterns are case-insensitive regular expressions.
+# Every list cites the rule ID it enforces.
+
+input_screen:
+  # E1 [hard]: danger to life or safety now -> 911 wording, no ticket, no model call
+  emergency:
+    - '\bfire\b'
+    - '\bon fire\b'
+    - '\bsmell(s|ing)? (of )?gas\b'
+    - '\bgas (leak|smell)\b'
+    - '\blive (wire|wires|power line)\b'
+    - '\bdowned (power )?lines?\b'
+    - '\b(car )?crash\b.*\b(injur|hurt|bleed)'
+    - '\b(break[- ]?in|robbery|assault) (in progress|happening)\b'
+    - '\bsomeone is (threatening|attacking)\b'
+    - '\b(not breathing|unconscious|heart attack)\b'
+  # E8: distress or self-harm -> hand off with crisis line
+  self_harm:
+    - '\b(kill|hurt|harm) myself\b'
+    - '\bsuicid'
+    - '\bend my life\b'
+    - '\bwant to die\b'
+  # S1 / S5: prompt injection; flagged, treated as data, never obeyed
+  injection:
+    - 'ignore (all |any )?(previous|prior|above|your) (instructions|rules|prompt)'
+    - '\b(system prompt|developer message)\b'
+    - '\byou are now\b'
+    - '\bact as\b'
+    - '\bjailbreak\b'
+    - '\breveal (your|the) (prompt|instructions|rules)'
+  # E7: asks for a person, complaint about staff, legal threat
+  human_request:
+    - '\b(speak|talk) (to|with) (a |an )?(human|person|agent|someone|supervisor|manager)\b'
+    - '\b(lawyer|sue|lawsuit|legal action)\b'
+
+redaction:
+  # D2 [hard]: never stored; replaced before storage AND before the model sees it
+  sin: '\b\d{3}[ -]?\d{3}[ -]?\d{3}\b'
+  payment_card: '\b(?:\d[ -]?){13,16}\b'
+  date_of_birth: '\b(?:dob|date of birth|born on)\b[^.\n]{0,25}\d'
+  health_card: '\b\d{4}[ -]?\d{3}[ -]?\d{3}[ -]?[A-Z]{2}\b'
+
+masking:
+  # D6 [hard]: applied to every log write (interaction_events, handoffs).
+  # Compiled case-SENSITIVE so the name pattern can rely on capitals; use
+  # (?i:...) for parts that should ignore case.
+  email: '[\w.+-]+@[\w-]+\.[\w.-]+'
+  phone: '(?:\+?1[ .-]?)?\(?\d{3}\)?[ .-]?\d{3}[ .-]?\d{4}\b'
+  unit: '(?:\b(?i:unit|apt|apartment|suite)\s*#?|#\s*)\d+[a-zA-Z]?\b'
+  street_number: '\b\d{1,6}(?=\s+[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*\s+(?:St|Street|Ave|Avenue|Rd|Road|Blvd|Dr|Drive|Cres|Crescent|Ct|Court|Way|Lane|Ln|Pl|Place|Terrace|Pkwy)\b)'
+  name: '(?i:my name is|this is|i am|i''m)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)'
+
+output_check:
+  # C1/C2/C4: commitments the agent must never make. Flagged and logged;
+  # src/guardrails/output_check.py decides the action.
+  commitment:
+    - '\b(within|in) \d+ (business )?(hours?|days?|weeks?)\b'
+    - '\b(by|on) (monday|tuesday|wednesday|thursday|friday|saturday|sunday|tomorrow)\b'
+    - '\b(high|top|urgent) priority\b'
+    - '\b(refund|compensat|reimburs|waive)'
+    - '\b(will be|you will be|they will be) fined\b'
+  # M3 [hard]: any ticket ID in a reply must have been returned by a tool
+  ticket_id: '\b311-\d{4}-\d{6}\b'
+  handoff_ref: '\bHO-\d{4}-\d{6}\b'
