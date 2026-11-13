@@ -95,3 +95,10 @@ alternatives, and why. The report draws on this file directly.
 
 * **Chose:** pages link `/static/*` with a content hash and are sent `Cache-Control: no-cache`.
 * **Why:** Cloudflare kept serving the previous `admin.js` for hours after a deploy, so the new Flow tab "did nothing" (the old script had no Flow tab).
+
+## D-017 Labour cost range for the cost model (2026-11-13)
+
+* **Chose:** test $55 to $85 per productive hour, base $70, for manual 311 intake. That is the City's posted wage for 311 representatives ($35.17 to $38.53), plus benefits at the 2026 budget ratio (32.8%), divided by the share of paid time spent on contacts (60% to 85%, base 70%).
+* **Alternatives:** the proposal's $35 to $55 an hour built up from the Job Bank regional wage ($17 to $31); the top down figure of $15.46 per interaction (division budget over total interactions).
+* **Why:** the Job Bank range is for the region's private call centres and is well below what the City pays. The top down figure includes management, technology and self serve channels that an intake agent would not remove. Sources and working are in docs/sources.md and docs/assumptions.md.
+* **Affects:** W7 cost model (manual cost per intake goes from about $4 to about $6), W3 fine tuning payoff volume, and the decision memo. The share of paid time on contacts is still an assumption to confirm.
