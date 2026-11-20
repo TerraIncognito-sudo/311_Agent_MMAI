@@ -4,8 +4,9 @@ happens when one fires.
 
 M3 [hard]: a ticket ID or handoff reference that no tool returned in this
     conversation means the model invented it; the reply is blocked.
-C1/C2/C4: commitment phrases (dates, priorities, refunds) are flagged and
-    logged. Extend here to rewrite or block them.
+C1/C2/C3/C4/C7 [hard, Policy v1.0]: commitment phrases (dates, priorities,
+    fines, refunds, visits). commitment_rule() says which rule a phrase breaks;
+    the "reply" tree replaces the reply with the approved wording.
 D8: policy rule IDs the model echoes from its prompt, such as "(M1)", are
     removed by strip_rule_ids() before the reply is checked or shown.
 """
@@ -69,12 +70,32 @@ def claim_phrase(reply: str) -> str | None:
 
 
 def commitment_phrase(reply: str) -> str | None:
-    """C1/C2/C4: the first commitment phrase in the reply."""
+    """C1/C2/C3/C4/C7: the first commitment phrase in the reply."""
     for p in _patterns()[0]:
         m = p.search(reply)
         if m:
             return m.group(0)
     return None
+
+
+# Which C rule a commitment phrase breaks, checked in this order (a phrase such as
+# "will visit tomorrow" is a visit first, C7, then a date, C1).
+_RULE_WORDS = (
+    ("C7", re.compile(r"visit|inspect|investigat|come (?:out|by)|stop by|look into|send ", re.I)),
+    ("C4", re.compile(r"refund|compensat|reimburs|waive|\b(?:pay|cover)\b", re.I)),
+    ("C3", re.compile(r"fined|ticketed|charged|violat|by-?law|breach", re.I)),
+    ("C2", re.compile(r"priorit|urgent|fast[- ]?track|expedit", re.I)),
+)
+
+
+def commitment_rule(reply: str) -> str | None:
+    """The rule (C7, C4, C3, C2 or C1, in that order) that the reply's commitment
+    phrases break; None if there are none. All phrases are looked at, so "a crew
+    will come by tomorrow" is C7 even though "by tomorrow" (C1) matches first."""
+    phrases = " | ".join(m.group(0) for p in _patterns()[0] for m in p.finditer(reply))
+    if not phrases:
+        return None
+    return next((rule for rule, words in _RULE_WORDS if words.search(phrases)), "C1")
 
 
 def check(reply: str, known_ids: set[str], ticket_created: bool = True) -> OutputResult:
@@ -85,5 +106,5 @@ def check(reply: str, known_ids: set[str], ticket_created: bool = True) -> Outpu
         return OutputResult(ok=False, flags=[f"invented_id:{i}" for i in invented], rule_id="M3")
     if not ticket_created and claim_phrase(reply):
         return OutputResult(ok=False, flags=["claimed_ticket_without_create"], rule_id="M3")
-    flags = ["commitment"] if commitment_phrase(reply) else []
-    return OutputResult(ok=True, flags=flags, rule_id="C1" if flags else None)
+    rule = commitment_rule(reply)
+    return OutputResult(ok=True, flags=["commitment"] if rule else [], rule_id=rule)

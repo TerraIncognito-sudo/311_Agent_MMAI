@@ -132,6 +132,14 @@ def test_c_rules_v1_flag_commitments(reply):
     assert output_check.check(reply, set()).flags == ["commitment"]
 
 
+@pytest.mark.parametrize("reply, rule", [
+    ("Someone will visit tomorrow.", "C7"), ("It will be picked up in two days.", "C1"),
+    ("I've marked this as urgent.", "C2"), ("They will be fined.", "C3"), ("You'll get a refund.", "C4"),
+])
+def test_commitment_rule_names_the_broken_rule(reply, rule):
+    assert output_check.commitment_rule(reply) == rule
+
+
 def test_approved_wording_is_never_flagged():
     from src.config import policy
     for key, text in policy()["wording"].items():

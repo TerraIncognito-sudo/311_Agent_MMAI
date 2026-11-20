@@ -227,7 +227,7 @@ nodes:
     action: handoff
     params: {reason: agent did not reach an answer within the step limit}
 
-  # ------------------------------------------------ reply check (M3, D8, C1)
+  # ------------------------------------------------ reply check (M3, D8, C1-C4, C7)
   reply_rule_ids:
     title: Reply quotes policy rule IDs?
     rule: D8
@@ -261,12 +261,65 @@ nodes:
     rule: M3
     action: handoff
     params: {handoff_rule: E9, reason: reply claimed a ticket no tool created}
+  # Policy v1.0: a reply that breaks C1 to C4 or C7 is replaced with the approved wording,
+  # not only logged (S3: the wording under C1 to C4). Checked visit first: "will visit
+  # tomorrow" gets the visit wording.
   commitment:
-    title: Promises a date, priority, fine or refund?
+    title: Says someone will visit, inspect or investigate?
+    rule: C7
+    check: reply_commitment
+    params: {rule: C7}
+    yes: visit_reply
+    no: refund_promise
+  visit_reply:
+    title: Replace the reply with the approved wording
+    rule: C7
+    action: reply
+    params: {wording: visit_or_inspection}
+  refund_promise:
+    title: Promises a refund, compensation, payment or fee waiver?
+    rule: C4
+    check: reply_commitment
+    params: {rule: C4}
+    yes: refund_reply
+    no: fine_claim
+  refund_reply:
+    title: Replace the reply with the approved wording
+    rule: C4
+    action: reply
+    params: {wording: asked_for_date}
+  fine_claim:
+    title: Says a by-law was or wasn't broken, or someone will be fined?
+    rule: C3
+    check: reply_commitment
+    params: {rule: C3}
+    yes: fine_reply
+    no: priority_claim
+  fine_reply:
+    title: Replace the reply with the approved wording
+    rule: C3
+    action: reply
+    params: {wording: asked_for_date}
+  priority_claim:
+    title: States a priority or that it is urgent?
+    rule: C2
+    check: reply_commitment
+    params: {rule: C2}
+    yes: priority_reply
+    no: date_promise
+  priority_reply:
+    title: Replace the reply with the approved wording
+    rule: C2
+    action: reply
+    params: {wording: asked_for_date}
+  date_promise:
+    title: Promises a date or time window?
     rule: C1
     check: reply_commitment
-    yes: commitment_flag
-  commitment_flag:
-    title: Flag it in the log for review
+    params: {rule: C1}
+    yes: date_reply
+  date_reply:
+    title: Replace the reply with the approved wording
     rule: C1
-    action: flag
+    action: reply
+    params: {wording: asked_for_date}

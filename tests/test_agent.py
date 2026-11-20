@@ -78,3 +78,34 @@ def test_m3_still_blocks_ids_nobody_gave(llm, sel, fresh_store):
     llm("Ticket 311-2026-000777 is open.")
     out = handle_turn(None, "what is the status of ticket 311-2026-000001", sel)
     assert out["rule_id"] == "M3" and fresh_store.handoffs
+
+
+# --- Policy v1.0: C1 to C4 and C7 replace the reply (not only logged) ---------
+import pytest  # noqa: E402
+
+
+@pytest.mark.parametrize("model_reply, rule, wording_start", [
+    ("Thanks! A crew will come by tomorrow to replace it.", "C7", "I can't say whether someone will visit."),
+    ("It will be replaced within 3 days.", "C1", "I can't give a date."),
+    ("I've marked this as urgent for you.", "C2", "I can't give a date."),
+    ("Your neighbour is violating the by-law.", "C3", "I can't give a date."),
+    ("The city will pay for a new bin.", "C4", "I can't give a date."),
+])
+def test_commitment_reply_is_replaced_with_approved_wording(llm, sel, fresh_store, model_reply, rule, wording_start):
+    llm([tool_call("policy_lookup", {"code": "SW-BIN"})], model_reply)
+    out = handle_turn(None, "My recycling bin lid at 12 Oak Street is cracked", sel)
+    assert out["reply"].startswith(wording_start) and out["rule_id"] == rule
+    assert "Solid Waste" in out["reply"] and "  " not in out["reply"]      # {unit} filled
+    assert model_reply not in out["reply"]
+
+
+def test_commitment_without_a_code_still_reads_well(llm, sel, fresh_store):
+    llm("We'll refund your fee.")
+    out = handle_turn(None, "hello", sel)
+    assert out["reply"] == "I can't give a date. The City team schedules the work after reviewing it."
+
+
+def test_reply_without_commitment_is_unchanged(llm, sel, fresh_store):
+    llm([tool_call("policy_lookup", {"code": "SW-BIN"})], "Which bin is it: garbage, recycling or organics?")
+    out = handle_turn(None, "My bin at 12 Oak Street is broken", sel)
+    assert out["reply"] == "Which bin is it: garbage, recycling or organics?"

@@ -62,6 +62,10 @@ class Ctx:
              "missing": ", ".join(res.get("missing") or []),
              "ticket_ids": ", ".join(t["ticket_id"] for t in res.get("tickets") or []),
              "code": (self.args or {}).get("code") or res.get("code") or st.code or ""}
+        # {unit} and {category} for approved wording at any hook (e.g. the reply tree)
+        entry = policy()["service_catalogue"].get(v["code"]) or {}
+        v.setdefault("unit", entry.get("unit") or "City")
+        v.setdefault("category", entry.get("category") or "")
         return v
 
 
@@ -166,9 +170,13 @@ def _reply_claims_ticket(ctx):
     return bool(phrase), f'says "{phrase}" but no ticket was created' if phrase else "no creation claim"
 
 
-def _reply_commitment(ctx):
+def _reply_commitment(ctx, rule=None):
     phrase = output_check.commitment_phrase(ctx.reply or "")
-    return bool(phrase), f'"{phrase}"' if phrase else "no commitment phrases"
+    if not phrase:
+        return False, "no commitment phrases"
+    got = output_check.commitment_rule(ctx.reply or "")
+    wanted = {r.strip() for r in str(rule).split(",") if r.strip()} if rule else None
+    return (wanted is None or got in wanted), f'"{phrase}" ({got})'
 
 
 def _reply_too_long(ctx, max_words=None):
@@ -197,7 +205,8 @@ CHECKS: dict[str, tuple[str, dict, list[str] | None, Callable]] = {
     "reply_has_rule_ids": ("Reply contains policy rule IDs", {}, ["reply"], _reply_has_rule_ids),
     "reply_invented_id": ("Reply quotes an ID no tool returned", {}, ["reply"], _reply_invented_id),
     "reply_claims_ticket": ("Reply claims a ticket that wasn't created", {}, ["reply"], _reply_claims_ticket),
-    "reply_commitment": ("Reply makes a commitment (date, priority, refund)", {}, ["reply"], _reply_commitment),
+    "reply_commitment": ("Reply makes a commitment (date, priority, fine, refund, visit)",
+                         {"rule": "optional: only this rule, e.g. C7 (or a list: C2, C3)"}, ["reply"], _reply_commitment),
     "reply_too_long": ("Reply longer than max_reply_words", {"max_words": "number (default: thresholds)"}, ["reply"], _reply_too_long),
     "always": ("Always yes", {}, None, _always),
 }
