@@ -7,17 +7,17 @@ from src.tools.knowledge import kb_search
 from src.tools.policy import policy_lookup
 from src.tools.tickets import create_ticket, get_status, search_tickets
 
-BIN = {"address": "12 Oak Street, G1A 1A1", "bin_type": "recycling", "damage_type": "cracked lid"}
+BIN = {"location": "12 Oak Street, G1A 1A1", "bin_type": "recycling", "damage_type": "cracked lid"}
 
 
 def test_policy_lookup_known_and_unknown():
     r = policy_lookup("SW-BIN")
-    assert r["ok"] and r["unit"] == "Solid Waste" and r["required_fields"] == ["address", "bin_type", "damage_type"]
+    assert r["ok"] and r["unit"] == "Solid Waste" and r["required_fields"] == ["location", "bin_type", "damage_type"]
     assert not policy_lookup("XX-NOPE")["ok"]          # A1
 
 
 def test_a4_create_ticket_requires_all_fields():
-    r = create_ticket("SW-BIN", {"address": "12 Oak Street"})
+    r = create_ticket("SW-BIN", {"location": "12 Oak Street"})
     assert not r["ok"] and set(r["missing"]) == {"bin_type", "damage_type"}
 
 

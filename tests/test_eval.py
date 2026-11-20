@@ -9,7 +9,7 @@ from src.eval import checks, harness, score, testset
 from src.eval.outcome import Conversation, derive
 from src.models import llm
 
-BIN_FIELDS = {"address": "12 Oak Street", "bin_type": "recycling", "damage_type": "cracked lid"}
+BIN_FIELDS = {"location": "12 Oak Street", "bin_type": "recycling", "damage_type": "cracked lid"}
 BIN_MESSAGE = "My recycling bin lid at 12 Oak Street is cracked"
 
 
@@ -37,11 +37,11 @@ def _bin_script():
 # ---------------------------------------------------------------- test sets
 def test_loader_accepts_both_record_shapes(tmp_path):
     f = _write_cases(tmp_path / "t.jsonl",
-                     _case(gold_fields={"address": "12 Oak Street"}),
+                     _case(gold_fields={"location": "12 Oak Street"}),
                      {"interaction_id": "rec_1", "message": "Pothole on Elm", "expected_code": "RD-POT",
                       "expected_action": "ask_clarification", "hazard_flag": "false"})
     a, b = testset.load(f)
-    assert (a.case_id, a.expected_code, a.gold_fields) == ("hw_900", "SW-BIN", {"address": "12 Oak Street"})
+    assert (a.case_id, a.expected_code, a.gold_fields) == ("hw_900", "SW-BIN", {"location": "12 Oak Street"})
     assert (b.case_id, b.expected_code, b.hazard_flag) == ("rec_1", "RD-POT", False)
 
 

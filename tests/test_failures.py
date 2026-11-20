@@ -3,7 +3,7 @@ from conftest import tool_call
 from src.agent.orchestrator import SetupError, handle_turn
 from src.models.llm import LLMError
 
-BIN_FIELDS = {"address": "12 Oak Street", "bin_type": "recycling", "damage_type": "cracked lid"}
+BIN_FIELDS = {"location": "12 Oak Street", "bin_type": "recycling", "damage_type": "cracked lid"}
 
 
 def test_f1_model_timeout_retried_once_then_e9(llm, sel, fresh_store):
@@ -30,7 +30,7 @@ def test_f3_create_ticket_failure_hands_off(llm, sel, fresh_store):
 
 
 def test_e6_missing_field_after_two_attempts(llm, sel, fresh_store):
-    partial = {"address": "12 Oak Street", "bin_type": "recycling"}
+    partial = {"location": "12 Oak Street", "bin_type": "recycling"}
     llm(
         [tool_call("policy_lookup", {"code": "SW-BIN"})],
         [tool_call("create_ticket", {"code": "SW-BIN", "fields": partial}, "a")],

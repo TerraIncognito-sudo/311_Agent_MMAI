@@ -28,7 +28,7 @@ def chat(message, iid=None):
 def test_walkthrough_traces_every_decision(llm, fresh_store):
     llm([tool_call("policy_lookup", {"code": "SW-BIN"})],
         [tool_call("create_ticket", {"code": "SW-BIN", "fields": {
-            "address": "12 Oak Street, G1A 1A1", "bin_type": "recycling", "damage_type": "cracked lid"}})],
+            "location": "12 Oak Street, G1A 1A1", "bin_type": "recycling", "damage_type": "cracked lid"}})],
         "Done.")
     iid = chat("My recycling bin lid is cracked at 12 Oak Street").json()["interaction_id"]
 
@@ -151,7 +151,7 @@ def test_dashboard_edits_are_picked_up_by_the_sync(fresh_store):
     ("policy.yaml", lambda t: t + "\n  bad: [unclosed", "not valid YAML"),
     ("policy.yaml", lambda t: t.replace("wording:", "wordings:"), "wording"),
     ("policy.yaml", lambda t: t.replace("  E1: {", "  X1: {"), "E1"),
-    ("guardrails.yaml", lambda t: t.replace("'\\bfire\\b'", "'(unclosed'"), "bad regular expression"),
+    ("guardrails.yaml", lambda t: t.replace("'\\bsuicid'", "'(unclosed'"), "bad regular expression"),
     ("prompts/agent/system_v1.md", lambda t: t + "\n{not_a_placeholder}", "not_a_placeholder"),
     ("app.yaml", lambda t: t.replace("system_v1.md", "missing.md"), "doesn't exist"),
 ])
@@ -209,7 +209,7 @@ def test_kb_document_created_in_admin_is_searchable_at_once(fresh_store):
 def _ticket_conversation(llm):
     llm([tool_call("policy_lookup", {"code": "SW-BIN"})],
         [tool_call("create_ticket", {"code": "SW-BIN", "fields": {
-            "address": "12 Oak Street, G1A 1A1", "bin_type": "recycling", "damage_type": "cracked lid"}})],
+            "location": "12 Oak Street, G1A 1A1", "bin_type": "recycling", "damage_type": "cracked lid"}})],
         "Done.")
     return chat("My recycling bin lid is cracked at 12 Oak Street").json()["interaction_id"]
 
@@ -228,7 +228,7 @@ def test_ticket_is_listed_linked_and_tracked(llm, fresh_store):
                      json={"status": "in_progress", "note": "crew booked", "author": "Sam"})
     assert ok.status_code == 200
     d = client.get(f"/api/admin/tickets/{tid}").json()
-    assert d["ticket"]["status"] == "in_progress" and d["required_fields"] == ["address", "bin_type", "damage_type"]
+    assert d["ticket"]["status"] == "in_progress" and d["required_fields"] == ["location", "bin_type", "damage_type"]
     u = d["updates"][0]
     assert (u["old_status"], u["new_status"], u["note"], u["author"]) == ("open", "in_progress", "crew booked", "Sam")
     assert client.get("/api/admin/tickets", params={"status": "open"}).json()["tickets"] == []
@@ -263,7 +263,7 @@ def test_pages_point_at_versioned_static_files():
 def test_analytics_counts_requests_outcomes_and_cost(llm, fresh_store):
     llm([tool_call("policy_lookup", {"code": "SW-BIN"})],
         [tool_call("create_ticket", {"code": "SW-BIN", "fields": {
-            "address": "12 Oak Street, G1A 1A1", "bin_type": "recycling", "damage_type": "cracked lid"}})],
+            "location": "12 Oak Street, G1A 1A1", "bin_type": "recycling", "damage_type": "cracked lid"}})],
         "Done.",
         [tool_call("handoff", {"rule_id": "E3", "reason": "can't tell which service"})])
     chat("My recycling bin lid is cracked at 12 Oak Street")
@@ -351,7 +351,7 @@ def _rerun(iid, model="other", provider="ollama", **headers):
 def test_rerun_replays_a_conversation_on_another_model_without_touching_records(llm, fresh_store):
     llm([tool_call("policy_lookup", {"code": "SW-BIN"})],
         [tool_call("create_ticket", {"code": "SW-BIN", "fields": {
-            "address": "12 Oak Street, G1A 1A1", "bin_type": "recycling", "damage_type": "cracked lid"}})],
+            "location": "12 Oak Street, G1A 1A1", "bin_type": "recycling", "damage_type": "cracked lid"}})],
         "Done.")
     iid = chat("My recycling bin lid is cracked at 12 Oak Street").json()["interaction_id"]
     assert len(fresh_store.tickets) == 1
@@ -359,7 +359,7 @@ def test_rerun_replays_a_conversation_on_another_model_without_touching_records(
     fake = llm([tool_call("policy_lookup", {"code": "SW-BIN"})],
                [tool_call("search_tickets", {"location": "12 Oak Street", "code": "SW-BIN"})],
                [tool_call("create_ticket", {"code": "SW-BIN", "fields": {
-                   "address": "100 Oak Street, G1A 1A1", "bin_type": "recycling", "damage_type": "cracked lid"}})],
+                   "location": "100 Oak Street, G1A 1A1", "bin_type": "recycling", "damage_type": "cracked lid"}})],
                "Filed.")
     job = _rerun(iid)
     assert job.status == "done" and job.done == 1 and job.model == "ollama:other", job.error

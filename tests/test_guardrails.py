@@ -73,3 +73,72 @@ def test_d8_rule_ids_never_reach_the_resident(llm, sel, fresh_store):
     out = handle_turn(None, "hello", sel)
     assert out["reply"] == "I'm an automated assistant. What is the issue?"
     assert any(e["rule_id"] == "D8" for e in fresh_store.events)
+
+
+# --- Policy v1.0 (guardrails.yaml v1.0) -------------------------------------
+import pytest  # noqa: E402
+
+E1_YES = [
+    "The house next door is on fire",
+    "Smoke is coming out of the apartment building on King St",
+    "A big branch came down on the power line and it's sparking",
+    "Exposed electrical wires hanging by the bus stop",
+    "There's an open manhole on Elm Street",
+    "Sewer cover missing in the middle of the road",
+]
+E1_NO = [  # look-alikes: a word alone is not E1 (Policy v1.0 E1, routes.EMERG.look_alikes)
+    "The fire hydrant on Elm is leaking",
+    "The fire pit in the park is damaged",
+    "Pothole on the fire route behind the mall",
+    "A limb fell on the wires but nothing is sparking",
+    "Someone dumped needles and paint cans in the park",
+]
+
+
+@pytest.mark.parametrize("text", E1_YES)
+def test_e1_v1_emergencies(text):
+    assert screen(text).has("emergency")
+
+
+@pytest.mark.parametrize("text", E1_NO)
+def test_e1_v1_look_alikes_are_not_emergencies(text):
+    assert not screen(text).has("emergency")
+
+
+def test_e7_complaint_about_staff():
+    assert screen("I want to complain about the crew that broke my bin").has("human_request")
+    assert not screen("The driver missed our street again").flags
+
+
+def test_d2_redacts_drivers_licence():
+    text, found = redact("my licence is A1234-56789-01234")
+    assert "56789" not in text and "drivers_licence" in found
+
+
+def test_d6_masks_postal_code_after_first_three():
+    out = mask("12 Oak Street, G1A 1A1")
+    assert "G1A" in out and "1A1" not in out and "[POSTAL_CODE]" in out
+
+
+@pytest.mark.parametrize("reply", [
+    "Someone will visit tomorrow.",                   # C1, C7
+    "We'll send someone to inspect it.",              # C7
+    "I've marked this as urgent.",                    # C2
+    "Your neighbour is violating the by-law.",        # C3
+    "The city will pay for the damage.",              # C4
+    "It will be picked up in two days.",              # C1
+])
+def test_c_rules_v1_flag_commitments(reply):
+    assert output_check.check(reply, set()).flags == ["commitment"]
+
+
+def test_approved_wording_is_never_flagged():
+    from src.config import policy
+    for key, text in policy()["wording"].items():
+        assert not output_check.check(str(text), set()).flags, key
+
+
+def test_d6_phone_mask_skips_ids():
+    uid = "4f9e78ff-f586-4abc-b6dd-573367952761"
+    assert mask(uid) == uid
+    assert "[PHONE]" in mask("call (416) 555-0199") and "[PHONE]" in mask("+1 416 555 0199")

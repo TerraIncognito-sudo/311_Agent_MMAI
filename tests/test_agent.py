@@ -2,7 +2,7 @@
 from conftest import tool_call
 from src.agent.orchestrator import handle_turn
 
-BIN_FIELDS = {"address": "12 Oak Street, G1A 1A1", "bin_type": "recycling", "damage_type": "cracked lid"}
+BIN_FIELDS = {"location": "12 Oak Street, G1A 1A1", "bin_type": "recycling", "damage_type": "cracked lid"}
 
 
 def test_routine_bin_case_end_to_end(llm, sel, fresh_store):
